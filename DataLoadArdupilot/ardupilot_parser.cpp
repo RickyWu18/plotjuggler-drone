@@ -170,6 +170,15 @@ void ArdupilotParser::finalizeDefs()
 
     if (is_special) continue;
 
+    // Pre-cache timestamp byte offset so the decode hot-path skips the field-sum loop
+    if (def.timestamp_idx >= 0)
+    {
+      int off = 0;
+      for (int i = 0; i < def.timestamp_idx; i++)
+        off += def.fields[i].byte_size;
+      def.timestamp_byte_offset = off;
+    }
+
     // Pre-build series keys for non-instance messages (P2)
     if (def.instance_idx < 0)
     {
@@ -450,15 +459,10 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
 
   // Extract timestamp from raw bytes to preserve full uint64 precision (P4)
   double timestamp = _lastTimestamp;
-  if (def.timestamp_idx >= 0 &&
-      def.timestamp_idx < static_cast<int>(def.fields.size()))
+  if (def.timestamp_byte_offset >= 0)
   {
-    size_t ts_offset = 0;
-    for (int i = 0; i < def.timestamp_idx; i++)
-      ts_offset += static_cast<size_t>(def.fields[i].byte_size);
-
     uint64_t ts_raw;
-    memcpy(&ts_raw, payload + ts_offset, 8);
+    memcpy(&ts_raw, payload + def.timestamp_byte_offset, 8);
     timestamp = static_cast<double>(ts_raw) * 1e-6;
     _lastTimestamp = timestamp;
   }
@@ -495,30 +499,47 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
 
     const double scaled = values[i] * field.mult_val;  // mult_val pre-cached in finalizeDefs
 
-    // Resolve series key: pre-built for non-instance messages (P2), runtime for instance
-    std::string key_buf;
+    // Resolve series key: pre-built for non-instance (P2), cached per-instance after first encounter
     const std::string* key_ptr;
-    if (instance < 0 && !def.series_keys.empty() && !def.series_keys[i].empty())
+    std::string key_buf;
+    if (instance >= 0)
+    {
+      auto& key_vec = def.instance_keys[instance];
+      if (key_vec.empty())
+      {
+        key_vec.resize(def.fields.size());
+        const std::string prefix = def.name + "/" + (_hashInstance ? "#" : "") + std::to_string(instance);
+        for (size_t j = 0; j < def.fields.size(); j++)
+        {
+          const auto& f = def.fields[j];
+          if (!f.is_string && !f.is_array)
+            key_vec[j] = prefix + "/" + f.label;
+        }
+      }
+      key_ptr = &key_vec[i];
+    }
+    else if (!def.series_keys.empty() && !def.series_keys[i].empty())
     {
       key_ptr = &def.series_keys[i];
     }
     else
     {
-      const std::string prefix = (instance >= 0)
-          ? def.name + "/" + (_hashInstance ? "#" : "") + std::to_string(instance)
-          : def.name;
-      key_buf = prefix + "/" + field.label;
+      key_buf = def.name + "/" + field.label;
       key_ptr = &key_buf;
     }
 
     auto& series = _series[*key_ptr];
-    if (series.unit_id == '?' && field.unit_id != '?')
-      series.unit_id = field.unit_id;
-    if (series.unit.empty() && series.unit_id != '?')
+    if (!series.unit_resolved)
     {
-      auto unit_it = _unitTable.find(series.unit_id);
-      if (unit_it != _unitTable.end() && !unit_it->second.empty())
-        series.unit = unit_it->second;
+      if (series.unit_id == '?' && field.unit_id != '?')
+        series.unit_id = field.unit_id;
+      if (series.unit_id != '?')
+      {
+        auto unit_it = _unitTable.find(series.unit_id);
+        if (unit_it != _unitTable.end() && !unit_it->second.empty())
+          series.unit = unit_it->second;
+      }
+      series.unit_resolved = true;
     }
     series.points.push_back({timestamp, scaled});
     _totalSamples++;

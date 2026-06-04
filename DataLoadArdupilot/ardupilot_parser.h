@@ -24,13 +24,15 @@ struct ApFieldDef
 
 struct ApMessageDef
 {
-  uint8_t                  msg_type      = 0;
-  uint8_t                  msg_len       = 0;
+  uint8_t                  msg_type             = 0;
+  uint8_t                  msg_len              = 0;
   std::string              name;
   std::vector<ApFieldDef>  fields;
-  int                      timestamp_idx = -1;
-  int                      instance_idx  = -1;
+  int                      timestamp_idx        = -1;
+  int                      timestamp_byte_offset = -1;  // pre-cached byte offset of TimeUS field
+  int                      instance_idx         = -1;
   std::vector<std::string> series_keys;   // pre-built "Name/Field" per field (non-instance only)
+  mutable std::unordered_map<int, std::vector<std::string>> instance_keys;  // keyed by instance id
   int                      stats_idx     = -1;   // index into _stats[], set in finalizeDefs()
   size_t                   data_count    = 0;    // data packets seen in pass 1, used for reserve
 };
@@ -45,7 +47,8 @@ struct ApSeries
 {
   std::vector<std::pair<double,double>> points;   // interleaved {timestamp, value}
   std::string unit;
-  char        unit_id = '?';
+  char        unit_id       = '?';
+  bool        unit_resolved = false;  // set after first resolution attempt; _unitTable is complete before decode
 };
 
 using ApSeriesMap = std::unordered_map<std::string, ApSeries>;
