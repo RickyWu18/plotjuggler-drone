@@ -96,12 +96,16 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
   }
 
   // Parsing phase: 0–50%
+  QElapsedTimer parse_timer;
+  parse_timer.start();
   ArdupilotParser parser(
       reinterpret_cast<const uint8_t*>(mapped),
       static_cast<size_t>(file_size),
       load_files,
       official_compat,
       [&](size_t pos, size_t total) -> bool {
+        if (parse_timer.elapsed() < 50) return true;
+        parse_timer.restart();
         progress_dialog.setValue(static_cast<int>(50.0 * pos / total));
         QApplication::processEvents();
         return !progress_dialog.wasCanceled();

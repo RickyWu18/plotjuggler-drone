@@ -117,6 +117,7 @@ void ArdupilotInfoDialog::onSearchChanged(const QString& text)
   auto* table = ui->tableParams;
   QRegularExpression re(text, QRegularExpression::CaseInsensitiveOption);
   const bool valid = re.isValid();
+  table->setUpdatesEnabled(false);
   for (int row = 0; row < table->rowCount(); row++)
   {
     auto* item = table->item(row, 0);
@@ -125,6 +126,7 @@ void ArdupilotInfoDialog::onSearchChanged(const QString& text)
                      : valid && re.match(item->text()).hasMatch();
     table->setRowHidden(row, !match);
   }
+  table->setUpdatesEnabled(true);
 }
 
 void ArdupilotInfoDialog::onExport()
