@@ -22,7 +22,7 @@
 
 const std::vector<const char*>& DataLoadArdupilot::compatibleFileExtensions() const
 {
-  static std::vector<const char*> exts = { "bin", "BIN" };
+  static std::vector<const char*> exts = { "BIN" };
   return exts;
 }
 
