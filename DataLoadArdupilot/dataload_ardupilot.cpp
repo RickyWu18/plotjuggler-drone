@@ -10,6 +10,7 @@
 #include <QCheckBox>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QProgressBar>
@@ -95,12 +96,16 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
   }
 
   // Parsing phase: 0–50%
+  QElapsedTimer parse_timer;
+  parse_timer.start();
   ArdupilotParser parser(
       reinterpret_cast<const uint8_t*>(mapped),
       static_cast<size_t>(file_size),
       load_files,
       official_compat,
       [&](size_t pos, size_t total) -> bool {
+        if (parse_timer.elapsed() < 50) return true;
+        parse_timer.restart();
         progress_dialog.setValue(static_cast<int>(50.0 * pos / total));
         QApplication::processEvents();
         return !progress_dialog.wasCanceled();
@@ -117,8 +122,10 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
   const auto& series_map   = parser.getSeriesMap();
   const size_t total_samples = parser.getTotalSamples();  // D1: no counting loop
 
-  size_t written  = 0;
-  int    last_pct = 50;
+  size_t written = 0;
+  QElapsedTimer write_timer;
+  write_timer.start();
+
   for (const auto& [key, series] : series_map)
   {
     if (series.points.empty()) continue;
@@ -143,18 +150,15 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
 
     written += series.points.size();
 
-    // D2: throttle progress updates — only fire when percentage changes
-    if (total_samples > 0)
+    // Time-based throttle: processEvents() cost scales with dest size, so cap at ~20 Hz
+    // regardless of how much data has already been loaded into PlotJuggler.
+    if (write_timer.elapsed() >= 50)
     {
-      const int pct = 50 + static_cast<int>(50.0 * written / total_samples);
-      if (pct != last_pct)
-      {
-        last_pct = pct;
-        progress_dialog.setValue(pct);
-        QApplication::processEvents();
-      }
+      write_timer.restart();
+      if (total_samples > 0)
+        progress_dialog.setValue(50 + static_cast<int>(50.0 * written / total_samples));
+      QApplication::processEvents();
     }
-
     if (progress_dialog.wasCanceled())
     {
       dest.clear();

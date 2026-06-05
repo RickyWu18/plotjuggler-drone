@@ -26,11 +26,12 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
 
   // --- Parameters tab ---
   auto* table = ui->tableParams;
+  table->setUpdatesEnabled(false);
+  table->setSortingEnabled(false);
   table->setRowCount(static_cast<int>(params.size()));
   table->setEditTriggers(QAbstractItemView::NoEditTriggers);
   table->verticalHeader()->setVisible(false);
   table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-  table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
 
   for (int row = 0; row < static_cast<int>(params.size()); row++)
   {
@@ -39,7 +40,11 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
     table->setItem(row, 1,
         new QTableWidgetItem(QString::number(params[row].value, 'g', 8)));
   }
-  table->sortItems(0);
+  // Set ResizeToContents after all items are inserted — avoids O(n²) rescans
+  table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+  table->horizontalHeader()->setSortIndicator(0, Qt::AscendingOrder);
+  table->setSortingEnabled(true);
+  table->setUpdatesEnabled(true);
 
   // Match search box font and height to the parameter name rows
   ui->searchEdit->setFont(table->font());
@@ -51,11 +56,12 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
 
   // --- Embedded Files tab ---
   auto* ftable = ui->tableFiles;
+  ftable->setUpdatesEnabled(false);
+  ftable->setSortingEnabled(false);
   ftable->setRowCount(static_cast<int>(files.size()));
   ftable->setEditTriggers(QAbstractItemView::NoEditTriggers);
   ftable->verticalHeader()->setVisible(false);
   ftable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-  ftable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
 
   for (int row = 0; row < static_cast<int>(files.size()); row++)
   {
@@ -67,6 +73,9 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
         new QTableWidgetItem(
             QString::number(static_cast<qulonglong>(files[row].data.size())) + " bytes"));
   }
+  ftable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+  ftable->setSortingEnabled(true);
+  ftable->setUpdatesEnabled(true);
 
   // "Export All" is always available when there are files
   ui->btnExportAll->setEnabled(!files.empty());
@@ -81,10 +90,10 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
 
   // --- Messages tab ---
   auto* mtable = ui->tableMsgs;
+  mtable->setUpdatesEnabled(false);
   mtable->setRowCount(static_cast<int>(msgs.size()));
   mtable->setEditTriggers(QAbstractItemView::NoEditTriggers);
   mtable->verticalHeader()->setVisible(false);
-  mtable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
   mtable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
 
   for (int row = 0; row < static_cast<int>(msgs.size()); row++)
@@ -95,6 +104,8 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
     mtable->setItem(row, 1,
         new QTableWidgetItem(QString::fromStdString(msgs[row].message)));
   }
+  mtable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+  mtable->setUpdatesEnabled(true);
 }
 
 ArdupilotInfoDialog::~ArdupilotInfoDialog()
@@ -108,14 +119,17 @@ void ArdupilotInfoDialog::onSearchChanged(const QString& text)
   auto* table = ui->tableParams;
   QRegularExpression re(text, QRegularExpression::CaseInsensitiveOption);
   const bool valid = re.isValid();
+  table->setUpdatesEnabled(false);
   for (int row = 0; row < table->rowCount(); row++)
   {
     auto* item = table->item(row, 0);
     const bool match = !item ? false
                      : text.isEmpty() ? true
-                     : valid && re.match(item->text()).hasMatch();
+                     : valid ? re.match(item->text()).hasMatch()
+                     : item->text().contains(text, Qt::CaseInsensitive);
     table->setRowHidden(row, !match);
   }
+  table->setUpdatesEnabled(true);
 }
 
 void ArdupilotInfoDialog::onExport()
@@ -217,6 +231,12 @@ void ArdupilotInfoDialog::restoreSettings()
   restoreGeometry(settings.value("ArdupilotParamsDialog/geometry").toByteArray());
   ui->tableParams->horizontalHeader()->restoreState(
       settings.value("ArdupilotParamsDialog/tableState").toByteArray());
+  // Re-apply resize modes — restoreState() serializes them and would overwrite
+  // the deferred-resize setup in the constructor with any previously saved mode.
+  ui->tableParams->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+  ui->tableParams->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
   ui->tableFiles->horizontalHeader()->restoreState(
       settings.value("ArdupilotParamsDialog/filesTableState").toByteArray());
+  ui->tableFiles->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+  ui->tableFiles->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
 }
