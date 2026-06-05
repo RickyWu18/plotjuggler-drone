@@ -4,11 +4,14 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
 #include <unordered_map>
+
+struct ApSeries;  // forward declaration for ApMessageDef::series_ptrs / instance_ptrs
 
 struct ApFieldDef
 {
@@ -31,10 +34,12 @@ struct ApMessageDef
   int                      timestamp_idx        = -1;
   int                      timestamp_byte_offset = -1;  // pre-cached byte offset of TimeUS field
   int                      instance_idx         = -1;
-  std::vector<std::string> series_keys;   // pre-built "Name/Field" per field (non-instance only)
+  std::vector<std::string>   series_keys;    // pre-built "Name/Field" per field (non-instance only)
+  std::vector<ApSeries*>     series_ptrs;    // parallel to series_keys; cached ApSeries* (non-instance)
   mutable std::unordered_map<int, std::vector<std::string>> instance_keys;  // keyed by instance id
-  int                      stats_idx     = -1;   // index into _stats[], set in finalizeDefs()
-  size_t                   data_count    = 0;    // data packets seen in pass 1, used for reserve
+  mutable std::unordered_map<int, std::vector<ApSeries*>>   instance_ptrs;  // parallel to instance_keys
+  int                        stats_idx     = -1;   // index into _stats[], set in finalizeDefs()
+  size_t                     data_count    = 0;    // data packets seen in pass 1, used for reserve
 };
 
 struct ApFmtuPending
@@ -125,10 +130,12 @@ private:
   bool           _hashInstance = false;
   ProgressCallback _progressCb;
 
-  std::unordered_map<uint8_t, ApMessageDef>  _fmtTable;
+  std::array<ApMessageDef,  256> _fmtTable;
+  bool                           _fmtValid[256]       = {};
   std::unordered_map<char,   std::string>    _unitTable;
   std::unordered_map<char,   double>         _multTable;
-  std::unordered_map<uint8_t, ApFmtuPending> _pendingFmtu;
+  std::array<ApFmtuPending,  256> _pendingFmtu;
+  bool                            _pendingFmtuValid[256] = {};
 
   uint8_t _unitMsgType = 0;
   uint8_t _multMsgType = 0;
