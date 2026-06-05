@@ -11,6 +11,8 @@
 #include <vector>
 #include <unordered_map>
 
+#include <PlotJuggler/plotdata.h>
+
 struct ApSeries;  // forward declaration for ApMessageDef::series_ptrs / instance_ptrs
 
 struct ApFieldDef
@@ -34,10 +36,12 @@ struct ApMessageDef
   int                      timestamp_idx        = -1;
   int                      timestamp_byte_offset = -1;  // pre-cached byte offset of TimeUS field
   int                      instance_idx         = -1;
-  std::vector<std::string>   series_keys;    // pre-built "Name/Field" per field (non-instance only)
-  std::vector<ApSeries*>     series_ptrs;    // parallel to series_keys; cached ApSeries* (non-instance)
-  mutable std::unordered_map<int, std::vector<std::string>> instance_keys;  // keyed by instance id
-  mutable std::unordered_map<int, std::vector<ApSeries*>>   instance_ptrs;  // parallel to instance_keys
+  std::vector<std::string>     series_keys;         // pre-built "Name/Field" per field (non-instance only)
+  std::vector<ApSeries*>       series_ptrs;         // parallel to series_keys; cached ApSeries*
+  std::vector<PJ::PlotData*>   plot_ptrs;           // parallel to series_keys; write-through PlotData*
+  mutable std::unordered_map<int, std::vector<std::string>>   instance_keys;       // keyed by instance id
+  mutable std::unordered_map<int, std::vector<ApSeries*>>     instance_ptrs;       // parallel to instance_keys
+  mutable std::unordered_map<int, std::vector<PJ::PlotData*>> instance_plot_ptrs;  // write-through (instance)
   int                        stats_idx     = -1;   // index into _stats[], set in finalizeDefs()
   size_t                     data_count    = 0;    // data packets seen in pass 1, used for reserve
 };
@@ -86,11 +90,13 @@ class ArdupilotParser
 {
 public:
   using ProgressCallback = std::function<bool(size_t pos, size_t total)>;
+  using PlotSink         = std::function<PJ::PlotData*(const std::string& key, const std::string& unit)>;
 
   explicit ArdupilotParser(const uint8_t* data, size_t length,
                            bool loadFiles = true,
                            bool hashInstance = false,
-                           ProgressCallback progressCb = nullptr);
+                           ProgressCallback progressCb = nullptr,
+                           PlotSink plotSink = nullptr);
 
   const ApSeriesMap&                    getSeriesMap()      const { return _series;        }
   const std::vector<ApMessageStats>&   getMessageStats()   const { return _stats;         }
@@ -129,6 +135,7 @@ private:
   bool           _loadFiles    = true;
   bool           _hashInstance = false;
   ProgressCallback _progressCb;
+  PlotSink         _plotSink;
 
   std::array<ApMessageDef,  256> _fmtTable;
   bool                           _fmtValid[256]       = {};

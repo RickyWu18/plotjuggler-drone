@@ -16,9 +16,10 @@ static constexpr int     FMT_PAYLOAD_LEN = 86;
 
 ArdupilotParser::ArdupilotParser(const uint8_t* data, size_t length,
                                  bool loadFiles, bool hashInstance,
-                                 ProgressCallback progressCb)
+                                 ProgressCallback progressCb,
+                                 PlotSink plotSink)
   : _data(data), _length(length), _loadFiles(loadFiles), _hashInstance(hashInstance),
-    _progressCb(std::move(progressCb))
+    _progressCb(std::move(progressCb)), _plotSink(std::move(plotSink))
 {
   // Seed built-in multiplier table so scaling works before MULT packets arrive
   _multTable['?'] = 1.0;
@@ -205,13 +206,26 @@ void ArdupilotParser::finalizeDefs()
     if (def.instance_idx < 0 && def.data_count > 0)
     {
       def.series_ptrs.resize(def.fields.size(), nullptr);
+      if (_plotSink) def.plot_ptrs.resize(def.fields.size(), nullptr);
       for (size_t i = 0; i < def.series_keys.size(); i++)
       {
         if (!def.series_keys[i].empty())
         {
           auto& s = _series[def.series_keys[i]];
-          s.points.reserve(def.data_count);
+          if (!_plotSink) s.points.reserve(def.data_count);
           def.series_ptrs[i] = &s;
+
+          if (_plotSink)
+          {
+            const auto& f = def.fields[i];
+            std::string unit_str;
+            if (f.unit_id != '?' && f.unit_id != '-')
+            {
+              auto uit = _unitTable.find(f.unit_id);
+              if (uit != _unitTable.end()) unit_str = uit->second;
+            }
+            def.plot_ptrs[i] = _plotSink(def.series_keys[i], unit_str);
+          }
         }
       }
     }
@@ -504,12 +518,14 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
   // Ensure instance keys and series pointers are built on first encounter (①)
   if (instance >= 0)
   {
-    auto& key_vec = def.instance_keys[instance];
-    auto& ptr_vec = def.instance_ptrs[instance];
+    auto& key_vec   = def.instance_keys[instance];
+    auto& ptr_vec   = def.instance_ptrs[instance];
+    auto& pplot_vec = def.instance_plot_ptrs[instance];
     if (key_vec.empty())
     {
       key_vec.resize(def.fields.size());
       ptr_vec.resize(def.fields.size(), nullptr);
+      if (_plotSink) pplot_vec.resize(def.fields.size(), nullptr);
       const std::string prefix = def.name + "/" + (_hashInstance ? "#" : "") + std::to_string(instance);
       for (size_t j = 0; j < def.fields.size(); j++)
       {
@@ -518,6 +534,16 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
         {
           key_vec[j] = prefix + "/" + f.label;
           ptr_vec[j] = &_series[key_vec[j]];
+          if (_plotSink)
+          {
+            std::string unit_str;
+            if (f.unit_id != '?' && f.unit_id != '-')
+            {
+              auto uit = _unitTable.find(f.unit_id);
+              if (uit != _unitTable.end()) unit_str = uit->second;
+            }
+            pplot_vec[j] = _plotSink(key_vec[j], unit_str);
+          }
         }
       }
     }
@@ -569,7 +595,24 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
       }
       series.unit_resolved = true;
     }
-    series.points.push_back({timestamp, scaled});
+
+    // Resolve write-through PlotData* (⑤): cached alongside series_ptrs / instance_ptrs
+    PJ::PlotData* pp = nullptr;
+    if (instance >= 0)
+    {
+      auto pit = def.instance_plot_ptrs.find(instance);
+      if (pit != def.instance_plot_ptrs.end() && i < pit->second.size())
+        pp = pit->second[i];
+    }
+    else if (i < def.plot_ptrs.size())
+    {
+      pp = def.plot_ptrs[i];
+    }
+
+    if (pp)
+      pp->pushBack({timestamp, scaled});
+    else
+      series.points.push_back({timestamp, scaled});
     _totalSamples++;
   }
 

@@ -111,69 +111,37 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
         progress_dialog.setValue(static_cast<int>(50.0 * pos / total));
         QApplication::processEvents();
         return !progress_dialog.wasCanceled();
+      },
+      // Write-through sink: build display key and obtain PlotData* once per series (⑤)
+      [&](const std::string& key, const std::string& unit) -> PJ::PlotData* {
+        std::string disp_unit;
+        disp_unit.reserve(unit.size() + 4);
+        for (char ch : unit)
+          ch == '/' ? disp_unit += "\xe2\x88\x95" : disp_unit += ch;
+
+        std::string display_key;
+        if (official_compat) display_key = "/" + key;
+        else                 display_key = key;
+        if (show_units && !disp_unit.empty())
+          display_key.append("(").append(disp_unit).append(")");
+
+        return &dest.getOrCreateNumeric(display_key);
       });
 
   if (progress_dialog.wasCanceled())
+  {
+    dest.clear();  // write-through: partial data may already be in dest
     return false;
+  }
 
   const qint64 parse_ms = phase_timer.elapsed();
 
-  // Write phase: 50–100%
-  phase_timer.restart();
-  progress_dialog.setLabelText("Writing data to PlotJuggler...");
-  progress_dialog.setValue(50);
-  QApplication::processEvents();
-
-  const auto& series_map   = parser.getSeriesMap();
-  const size_t total_samples = parser.getTotalSamples();  // D1: no counting loop
-
-  size_t written = 0;
-  QElapsedTimer write_timer;
-  write_timer.start();
-
-  for (const auto& [key, series] : series_map)
-  {
-    if (series.points.empty()) continue;
-
-    // Replace ASCII '/' with Unicode division slash (U+2215, D3: single forward pass)
-    // to prevent PlotJuggler from treating "m/s" as a path separator.
-    std::string unit;
-    unit.reserve(series.unit.size() + 4);
-    for (char ch : series.unit)
-      ch == '/' ? unit += "\xe2\x88\x95" : unit += ch;
-
-    // D6: build display_key in-place, no extra copy in the false branch
-    std::string display_key;
-    if (official_compat) display_key = "/" + key;
-    else                 display_key = key;
-    if (show_units && !unit.empty())
-      display_key.append("(").append(unit).append(")");
-
-    auto& plot = dest.getOrCreateNumeric(display_key);
-    for (const auto& [t, v] : series.points)  // D5: interleaved layout
-      plot.pushBack({t, v});
-
-    written += series.points.size();
-
-    // Time-based throttle: processEvents() cost scales with dest size, so cap at ~20 Hz
-    // regardless of how much data has already been loaded into PlotJuggler.
-    if (write_timer.elapsed() >= 50)
-    {
-      write_timer.restart();
-      if (total_samples > 0)
-        progress_dialog.setValue(50 + static_cast<int>(50.0 * written / total_samples));
-      QApplication::processEvents();
-    }
-    if (progress_dialog.wasCanceled())
-    {
-      dest.clear();
-      return false;
-    }
-  }
+  const auto& series_map    = parser.getSeriesMap();
+  const size_t total_samples = parser.getTotalSamples();
 
   ApLoadStats stats;
   stats.parse_ms      = parse_ms;
-  stats.write_ms      = phase_timer.elapsed();
+  stats.write_ms      = 0;  // write-through: all pushes happened during parse
   stats.file_size     = file_size;
   stats.total_samples = total_samples;
   stats.series_count  = series_map.size();
