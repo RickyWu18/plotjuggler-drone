@@ -96,8 +96,10 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
   }
 
   // Parsing phase: 0–50%
-  QElapsedTimer parse_timer;
+  QElapsedTimer parse_timer;     // throttle timer for the progress callback
+  QElapsedTimer phase_timer;     // measures total elapsed time per phase (Debug tab)
   parse_timer.start();
+  phase_timer.start();
   ArdupilotParser parser(
       reinterpret_cast<const uint8_t*>(mapped),
       static_cast<size_t>(file_size),
@@ -114,7 +116,10 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
   if (progress_dialog.wasCanceled())
     return false;
 
+  const qint64 parse_ms = phase_timer.elapsed();
+
   // Write phase: 50–100%
+  phase_timer.restart();
   progress_dialog.setLabelText("Writing data to PlotJuggler...");
   progress_dialog.setValue(50);
   QApplication::processEvents();
@@ -166,9 +171,17 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
     }
   }
 
+  ApLoadStats stats;
+  stats.parse_ms      = parse_ms;
+  stats.write_ms      = phase_timer.elapsed();
+  stats.file_size     = file_size;
+  stats.total_samples = total_samples;
+  stats.series_count  = series_map.size();
+
   auto* dlg = new ArdupilotInfoDialog(parser.getParameters(),
                                       parser.getEmbeddedFiles(),
                                       parser.getLogMessages(),
+                                      stats,
                                       main_window);
   dlg->setWindowTitle(
       QString("ArduPilot log: %1")
