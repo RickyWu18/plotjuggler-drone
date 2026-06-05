@@ -230,23 +230,22 @@ void ArdupilotInfoDialog::exportFilesToFolder(const QList<QModelIndex>& rows)
 #ifdef ARDUPILOT_DEBUG_TAB
 void ArdupilotInfoDialog::setupDebugTab(const ApLoadStats& stats)
 {
-  const qint64 total_ms = stats.parse_ms + stats.write_ms;
   const double file_mb  = stats.file_size / (1024.0 * 1024.0);
 
-  // Throughput guards against divide-by-zero on tiny/fast loads
-  const double parse_mb_s   = stats.parse_ms > 0 ? file_mb / (stats.parse_ms / 1000.0) : 0.0;
-  const double samples_per_s = total_ms > 0
-      ? static_cast<double>(stats.total_samples) / (total_ms / 1000.0) : 0.0;
+  const double load_mb_s     = stats.load_ms > 0 ? file_mb / (stats.load_ms / 1000.0) : 0.0;
+  const double samples_per_s = stats.load_ms > 0
+      ? static_cast<double>(stats.total_samples) / (stats.load_ms / 1000.0) : 0.0;
+  const double avg_per_series = stats.series_count > 0
+      ? static_cast<double>(stats.total_samples) / stats.series_count : 0.0;
 
   const QVector<QPair<QString, QString>> rows = {
-    { "File size",        QString::number(file_mb, 'f', 2) + " MB" },
-    { "Parse time",       QString::number(stats.parse_ms) + " ms" },
-    { "Write time",       QString::number(stats.write_ms) + " ms" },
-    { "Total time",       QString::number(total_ms) + " ms" },
-    { "Total samples",    QString::number(static_cast<qulonglong>(stats.total_samples)) },
-    { "Numeric series",   QString::number(static_cast<qulonglong>(stats.series_count)) },
-    { "Parse throughput", QString::number(parse_mb_s, 'f', 1) + " MB/s" },
-    { "Sample throughput",QString::number(samples_per_s / 1e6, 'f', 2) + " M samples/s" },
+    { "File size",          QString::number(file_mb, 'f', 2) + " MB" },
+    { "Load time",          QString::number(stats.load_ms) + " ms" },
+    { "Total samples",      QString::number(static_cast<qulonglong>(stats.total_samples)) },
+    { "Numeric series",     QString::number(static_cast<qulonglong>(stats.series_count)) },
+    { "Avg samples/series", QString::number(avg_per_series, 'f', 0) },
+    { "Throughput",         QString::number(load_mb_s, 'f', 1) + " MB/s" },
+    { "Sample rate",        QString::number(samples_per_s / 1e6, 'f', 2) + " M samples/s" },
   };
 
   auto* tab    = new QWidget();

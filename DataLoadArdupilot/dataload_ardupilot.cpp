@@ -95,11 +95,10 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
     bar->setAlignment(Qt::AlignCenter);
   }
 
-  // Parsing phase: 0–50%
-  QElapsedTimer parse_timer;     // throttle timer for the progress callback
-  QElapsedTimer phase_timer;     // measures total elapsed time per phase (Debug tab)
+  QElapsedTimer parse_timer;   // throttle timer for progress callback
+  QElapsedTimer load_timer;    // total load time for Debug tab
   parse_timer.start();
-  phase_timer.start();
+  load_timer.start();
   ArdupilotParser parser(
       reinterpret_cast<const uint8_t*>(mapped),
       static_cast<size_t>(file_size),
@@ -134,14 +133,11 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
     return false;
   }
 
-  const qint64 parse_ms = phase_timer.elapsed();
-
-  const auto& series_map    = parser.getSeriesMap();
+  const auto& series_map     = parser.getSeriesMap();
   const size_t total_samples = parser.getTotalSamples();
 
   ApLoadStats stats;
-  stats.parse_ms      = parse_ms;
-  stats.write_ms      = 0;  // write-through: all pushes happened during parse
+  stats.load_ms       = load_timer.elapsed();
   stats.file_size     = file_size;
   stats.total_samples = total_samples;
   stats.series_count  = series_map.size();

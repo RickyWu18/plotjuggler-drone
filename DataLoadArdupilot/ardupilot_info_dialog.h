@@ -16,11 +16,10 @@ namespace Ui { class ArdupilotInfoDialog; }
 // Diagnostic timing/size figures shown in the Debug tab (debug builds only).
 struct ApLoadStats
 {
-  qint64 parse_ms     = 0;   // time spent decoding the .bin file
-  qint64 write_ms     = 0;   // time spent pushing samples into PlotJuggler
-  qint64 file_size    = 0;   // log file size in bytes
-  size_t total_samples = 0;  // total number of data points emitted
-  size_t series_count  = 0;  // number of distinct numeric series
+  qint64 load_ms       = 0;   // total wall-clock time to load (parse + write-through)
+  qint64 file_size     = 0;   // log file size in bytes
+  size_t total_samples = 0;   // total number of data points emitted
+  size_t series_count  = 0;   // number of distinct numeric series
 };
 
 class ArdupilotInfoDialog : public QDialog
