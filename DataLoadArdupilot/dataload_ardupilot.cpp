@@ -158,11 +158,11 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
       if (total_samples > 0)
         progress_dialog.setValue(50 + static_cast<int>(50.0 * written / total_samples));
       QApplication::processEvents();
-      if (progress_dialog.wasCanceled())
-      {
-        dest.clear();
-        return false;
-      }
+    }
+    if (progress_dialog.wasCanceled())
+    {
+      dest.clear();
+      return false;
     }
   }
 

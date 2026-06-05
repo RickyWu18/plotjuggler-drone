@@ -40,9 +40,9 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
     table->setItem(row, 1,
         new QTableWidgetItem(QString::number(params[row].value, 'g', 8)));
   }
-  table->sortItems(0);
   // Set ResizeToContents after all items are inserted — avoids O(n²) rescans
   table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+  table->horizontalHeader()->setSortIndicator(0, Qt::AscendingOrder);
   table->setSortingEnabled(true);
   table->setUpdatesEnabled(true);
 
@@ -57,6 +57,7 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
   // --- Embedded Files tab ---
   auto* ftable = ui->tableFiles;
   ftable->setUpdatesEnabled(false);
+  ftable->setSortingEnabled(false);
   ftable->setRowCount(static_cast<int>(files.size()));
   ftable->setEditTriggers(QAbstractItemView::NoEditTriggers);
   ftable->verticalHeader()->setVisible(false);
@@ -73,6 +74,7 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
             QString::number(static_cast<qulonglong>(files[row].data.size())) + " bytes"));
   }
   ftable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+  ftable->setSortingEnabled(true);
   ftable->setUpdatesEnabled(true);
 
   // "Export All" is always available when there are files
@@ -123,7 +125,8 @@ void ArdupilotInfoDialog::onSearchChanged(const QString& text)
     auto* item = table->item(row, 0);
     const bool match = !item ? false
                      : text.isEmpty() ? true
-                     : valid && re.match(item->text()).hasMatch();
+                     : valid ? re.match(item->text()).hasMatch()
+                     : item->text().contains(text, Qt::CaseInsensitive);
     table->setRowHidden(row, !match);
   }
   table->setUpdatesEnabled(true);
@@ -228,6 +231,12 @@ void ArdupilotInfoDialog::restoreSettings()
   restoreGeometry(settings.value("ArdupilotParamsDialog/geometry").toByteArray());
   ui->tableParams->horizontalHeader()->restoreState(
       settings.value("ArdupilotParamsDialog/tableState").toByteArray());
+  // Re-apply resize modes — restoreState() serializes them and would overwrite
+  // the deferred-resize setup in the constructor with any previously saved mode.
+  ui->tableParams->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+  ui->tableParams->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
   ui->tableFiles->horizontalHeader()->restoreState(
       settings.value("ArdupilotParamsDialog/filesTableState").toByteArray());
+  ui->tableFiles->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+  ui->tableFiles->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
 }
