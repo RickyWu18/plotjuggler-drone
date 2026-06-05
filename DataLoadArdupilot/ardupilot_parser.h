@@ -42,8 +42,8 @@ struct ApMessageDef
   mutable std::unordered_map<int, std::vector<std::string>>   instance_keys;       // keyed by instance id
   mutable std::unordered_map<int, std::vector<ApSeries*>>     instance_ptrs;       // parallel to instance_keys
   mutable std::unordered_map<int, std::vector<PJ::PlotData*>> instance_plot_ptrs;  // write-through (instance)
-  int                        stats_idx     = -1;   // index into _stats[], set in finalizeDefs()
-  size_t                     data_count    = 0;    // data packets seen in pass 1, used for reserve
+  int                        stats_idx  = -1;   // index into _stats[], set in finalizeOneDef()
+  bool                       finalized  = false; // true after finalizeOneDef() has run
 };
 
 struct ApFmtuPending
@@ -107,9 +107,8 @@ public:
 
 private:
   void parse();
-  bool buildTables();   // pass 1: populate _fmtTable, unit/mult/fmtu tables, data_count
-  void finalizeDefs();  // pre-build series_keys, cache mult_val, init stats, reserve vectors
-  bool decodeData();    // pass 2: decode data packets using pre-built structures
+  bool parseSinglePass();                 // single scan: tables + lazy finalize + decode
+  void finalizeOneDef(ApMessageDef& def); // per-type lazy finalize (called on first data packet)
 
   static ApMessageDef buildMessageDef(const uint8_t* payload86);
   static int          fieldByteSize(char c);

@@ -108,7 +108,7 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
       [&](size_t pos, size_t total) -> bool {
         if (parse_timer.elapsed() < 50) return true;
         parse_timer.restart();
-        progress_dialog.setValue(static_cast<int>(50.0 * pos / total));
+        progress_dialog.setValue(static_cast<int>(100.0 * pos / total));
         QApplication::processEvents();
         return !progress_dialog.wasCanceled();
       },

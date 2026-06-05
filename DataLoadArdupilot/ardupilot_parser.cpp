@@ -43,9 +43,7 @@ ArdupilotParser::ArdupilotParser(const uint8_t* data, size_t length,
 
 void ArdupilotParser::parse()
 {
-  if (!buildTables()) return;
-  finalizeDefs();
-  if (!decodeData()) return;
+  if (!parseSinglePass()) return;
 
   // Post-pass: resolve any units still unset (unit_id set, unit string empty)
   for (auto& [key, series] : _series)
@@ -61,7 +59,91 @@ void ArdupilotParser::parse()
   if (_loadFiles) assembleEmbeddedFiles();
 }
 
-bool ArdupilotParser::buildTables()
+void ArdupilotParser::finalizeOneDef(ApMessageDef& def)
+{
+  def.finalized = true;
+
+  const bool is_special = (def.msg_type == _unitMsgType || def.msg_type == _multMsgType ||
+                           def.msg_type == _fmtuMsgType || def.msg_type == _fileMsgType);
+
+  // Cache mult_val on every field so the decode hot-path needs no map lookup
+  for (auto& field : def.fields)
+  {
+    if (field.mult_id == '?')
+    {
+      switch (field.fmt_char)
+      {
+        case 'c': case 'C': field.mult_val = 1e-2; break;
+        case 'e': case 'E': field.mult_val = 1e-4; break;
+        case 'L':           field.mult_val = 1e-7; break;
+        default:            field.mult_val = 1.0;  break;
+      }
+    }
+    else if (field.mult_id == '-')
+    {
+      field.mult_val = 1.0;
+    }
+    else
+    {
+      auto it = _multTable.find(field.mult_id);
+      field.mult_val = (it != _multTable.end() && it->second != 0.0) ? it->second : 1.0;
+    }
+  }
+
+  if (is_special) return;
+
+  // Pre-cache timestamp byte offset
+  if (def.timestamp_idx >= 0)
+  {
+    int off = 0;
+    for (int i = 0; i < def.timestamp_idx; i++)
+      off += def.fields[i].byte_size;
+    def.timestamp_byte_offset = off;
+  }
+
+  // Pre-build series keys for non-instance messages
+  if (def.instance_idx < 0)
+  {
+    def.series_keys.resize(def.fields.size());
+    for (size_t i = 0; i < def.fields.size(); i++)
+    {
+      const auto& f = def.fields[i];
+      if (!f.is_string && !f.is_array)
+        def.series_keys[i] = def.name + "/" + f.label;
+    }
+  }
+
+  // Init stats entry
+  def.stats_idx = static_cast<int>(_stats.size());
+  _stats.push_back({def.name, 0});
+
+  // Cache series pointers for non-instance messages (①⑤)
+  if (def.instance_idx < 0)
+  {
+    def.series_ptrs.resize(def.fields.size(), nullptr);
+    if (_plotSink) def.plot_ptrs.resize(def.fields.size(), nullptr);
+    for (size_t i = 0; i < def.series_keys.size(); i++)
+    {
+      if (!def.series_keys[i].empty())
+      {
+        def.series_ptrs[i] = &_series[def.series_keys[i]];
+        if (_plotSink)
+        {
+          const auto& f = def.fields[i];
+          std::string unit_str;
+          if (f.unit_id != '?' && f.unit_id != '-')
+          {
+            auto uit = _unitTable.find(f.unit_id);
+            if (uit != _unitTable.end()) unit_str = uit->second;
+          }
+          def.plot_ptrs[i] = _plotSink(def.series_keys[i], unit_str);
+        }
+      }
+    }
+  }
+}
+
+bool ArdupilotParser::parseSinglePass()
 {
   size_t pos = 0;
   int last_percent = -1;
@@ -95,190 +177,38 @@ bool ArdupilotParser::buildTables()
       else if (name == "FILE") _fileMsgType = mtype;
 
       applyPendingFmtu(mtype);
-
-      if (_progressCb)
-      {
-        const int pct = static_cast<int>(100.0 * pos / (_length * 2));
-        if (pct != last_percent)
-        {
-          last_percent = pct;
-          if (!_progressCb(pos, _length * 2)) return false;
-        }
-      }
-      continue;
     }
-
-    if (!_fmtValid[msgid]) break;
-
-    const ApMessageDef& def = _fmtTable[msgid];
-    if (def.msg_len < 3) break;
-
-    const size_t payload_len = static_cast<size_t>(def.msg_len) - 3;
-    if (pos + payload_len > _length) break;
-
-    const uint8_t* payload = _data + pos;
-    pos += payload_len;
-
-    // Process meta packets; count data packets for vector pre-reserve (P5)
-    if      (msgid == _unitMsgType) parseUnitPacket(payload, def);
-    else if (msgid == _multMsgType) parseMultPacket(payload, def);
-    else if (msgid == _fmtuMsgType) parseFmtuPacket(payload, def);
-    else                            _fmtTable[msgid].data_count++;
-
-    if (_progressCb)
+    else
     {
-      const int pct = static_cast<int>(100.0 * pos / (_length * 2));
-      if (pct != last_percent)
-      {
-        last_percent = pct;
-        if (!_progressCb(pos, _length * 2)) return false;
-      }
-    }
-  }
+      if (!_fmtValid[msgid]) break;
 
-  return true;
-}
+      ApMessageDef& def = _fmtTable[msgid];
+      if (def.msg_len < 3) break;
 
-void ArdupilotParser::finalizeDefs()
-{
-  for (int itype = 0; itype < 256; itype++)
-  {
-    if (!_fmtValid[itype]) continue;
-    const uint8_t type = static_cast<uint8_t>(itype);
-    auto& def = _fmtTable[itype];
+      const size_t payload_len = static_cast<size_t>(def.msg_len) - 3;
+      if (pos + payload_len > _length) break;
 
-    const bool is_special = (type == _unitMsgType || type == _multMsgType ||
-                             type == _fmtuMsgType || type == _fileMsgType);
+      const uint8_t* payload = _data + pos;
+      pos += payload_len;
 
-    // Cache mult_val on every field so the decode hot-path needs no map lookup
-    for (auto& field : def.fields)
-    {
-      if (field.mult_id == '?')
-      {
-        // Fallback scaling for older logs without FMTU packets
-        switch (field.fmt_char)
-        {
-          case 'c': case 'C': field.mult_val = 1e-2; break;
-          case 'e': case 'E': field.mult_val = 1e-4; break;
-          case 'L':           field.mult_val = 1e-7; break;
-          default:            field.mult_val = 1.0;  break;
-        }
-      }
-      else if (field.mult_id == '-')
-      {
-        field.mult_val = 1.0;  // '-' means no multiplier in ArduPilot
-      }
+      if      (msgid == _unitMsgType) parseUnitPacket(payload, def);
+      else if (msgid == _multMsgType) parseMultPacket(payload, def);
+      else if (msgid == _fmtuMsgType) parseFmtuPacket(payload, def);
+      else if (msgid == _fileMsgType) { if (_loadFiles) parseFilePacket(payload, def); }
       else
       {
-        auto it = _multTable.find(field.mult_id);
-        field.mult_val = (it != _multTable.end() && it->second != 0.0) ? it->second : 1.0;
+        if (!def.finalized) finalizeOneDef(def);
+        parseDataPacket(payload, def);
       }
     }
-
-    if (is_special) continue;
-
-    // Pre-cache timestamp byte offset so the decode hot-path skips the field-sum loop
-    if (def.timestamp_idx >= 0)
-    {
-      int off = 0;
-      for (int i = 0; i < def.timestamp_idx; i++)
-        off += def.fields[i].byte_size;
-      def.timestamp_byte_offset = off;
-    }
-
-    // Pre-build series keys for non-instance messages (P2)
-    if (def.instance_idx < 0)
-    {
-      def.series_keys.resize(def.fields.size());
-      for (size_t i = 0; i < def.fields.size(); i++)
-      {
-        const auto& f = def.fields[i];
-        if (!f.is_string && !f.is_array)
-          def.series_keys[i] = def.name + "/" + f.label;
-      }
-    }
-
-    // Pre-init stats entry so parseDataPacket can use a direct index (P3)
-    def.stats_idx = static_cast<int>(_stats.size());
-    _stats.push_back({def.name, 0});
-
-    // Pre-reserve series vectors and cache pointers for non-instance messages (P5 + ①)
-    if (def.instance_idx < 0 && def.data_count > 0)
-    {
-      def.series_ptrs.resize(def.fields.size(), nullptr);
-      if (_plotSink) def.plot_ptrs.resize(def.fields.size(), nullptr);
-      for (size_t i = 0; i < def.series_keys.size(); i++)
-      {
-        if (!def.series_keys[i].empty())
-        {
-          auto& s = _series[def.series_keys[i]];
-          if (!_plotSink) s.points.reserve(def.data_count);
-          def.series_ptrs[i] = &s;
-
-          if (_plotSink)
-          {
-            const auto& f = def.fields[i];
-            std::string unit_str;
-            if (f.unit_id != '?' && f.unit_id != '-')
-            {
-              auto uit = _unitTable.find(f.unit_id);
-              if (uit != _unitTable.end()) unit_str = uit->second;
-            }
-            def.plot_ptrs[i] = _plotSink(def.series_keys[i], unit_str);
-          }
-        }
-      }
-    }
-  }
-}
-
-bool ArdupilotParser::decodeData()
-{
-  size_t pos = 0;
-  int last_percent = -1;
-
-  while (pos + 3 <= _length)
-  {
-    if (_data[pos] != HEAD_BYTE1 || _data[pos + 1] != HEAD_BYTE2)
-    {
-      pos++;
-      continue;
-    }
-
-    const uint8_t msgid = _data[pos + 2];
-    pos += 3;
-
-    if (msgid == FMT_MSGID)
-    {
-      pos += static_cast<size_t>(FMT_PAYLOAD_LEN);
-      if (pos > _length) break;
-      continue;
-    }
-
-    if (!_fmtValid[msgid]) break;
-
-    const ApMessageDef& def = _fmtTable[msgid];
-    if (def.msg_len < 3) break;
-
-    const size_t payload_len = static_cast<size_t>(def.msg_len) - 3;
-    if (pos + payload_len > _length) break;
-
-    const uint8_t* payload = _data + pos;
-    pos += payload_len;
-
-    if      (msgid == _unitMsgType) { /* already processed in pass 1 */ }
-    else if (msgid == _multMsgType) { /* already processed in pass 1 */ }
-    else if (msgid == _fmtuMsgType) { /* already processed in pass 1 */ }
-    else if (msgid == _fileMsgType) { if (_loadFiles) parseFilePacket(payload, def); }
-    else                            parseDataPacket(payload, def);
 
     if (_progressCb)
     {
-      const int pct = static_cast<int>(100.0 * (_length + pos) / (_length * 2));
+      const int pct = static_cast<int>(100.0 * pos / _length);
       if (pct != last_percent)
       {
         last_percent = pct;
-        if (!_progressCb(_length + pos, _length * 2)) return false;
+        if (!_progressCb(pos, _length)) return false;
       }
     }
   }
