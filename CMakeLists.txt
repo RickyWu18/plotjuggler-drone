@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(plotjuggler_drone CXX)
+project(plotjuggler_drone CXX C)
 
 cmake_policy(SET CMP0177 NEW)
 
@@ -9,7 +9,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 
 # ── Qt ─────────────────────────────────────────────────────────────────────
-find_package(Qt5 REQUIRED COMPONENTS Core Widgets Xml Network)
+find_package(Qt5 REQUIRED COMPONENTS Core Widgets Xml Network Svg)
 
 # ── PlotJuggler (out-of-tree, bypass broken installed Config.cmake) ─────────
 # Point PJ_INSTALL at the prefix where PlotJuggler was installed.
@@ -19,6 +19,10 @@ find_package(Qt5 REQUIRED COMPONENTS Core Widgets Xml Network)
 #     install/                 <- PJ_INSTALL
 set(PJ_INSTALL "${CMAKE_CURRENT_SOURCE_DIR}/../../install"
     CACHE PATH "PlotJuggler install prefix (contains bin/, include/, lib/)")
+
+# Source tree needed for non-installed internal headers (timeseries_qwt.h, QWT)
+set(PJ_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../PlotJuggler"
+    CACHE PATH "PlotJuggler source directory")
 
 find_library(PJ_BASE_LIB NAMES plotjuggler_base REQUIRED
     HINTS "${PJ_INSTALL}/lib")
@@ -54,3 +58,4 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # add_subdirectory(PluginTemplate)
 add_subdirectory(DataStreamMavlink)
 add_subdirectory(DataLoadArdupilot)
+add_subdirectory(ToolboxRealtimeFFT)
