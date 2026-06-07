@@ -1,3 +1,6 @@
 [submodule "3rdparty/c_library_v2"]
 	path = 3rdparty/c_library_v2
 	url = https://github.com/mavlink/c_library_v2.git
+[submodule "ToolboxRealtimeFFT/3rdparty/KissFFT"]
+	path = ToolboxRealtimeFFT/3rdparty/KissFFT
+	url = https://github.com/mborgerding/kissfft
