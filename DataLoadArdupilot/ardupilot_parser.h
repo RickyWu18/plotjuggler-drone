@@ -39,8 +39,7 @@ struct ApMessageDef
   std::vector<std::string>     series_keys;         // pre-built "Name/Field" per field (non-instance only)
   std::vector<ApSeries*>       series_ptrs;         // parallel to series_keys; cached ApSeries*
   std::vector<PJ::PlotData*>   plot_ptrs;           // parallel to series_keys; write-through PlotData*
-  mutable std::unordered_map<int, std::vector<std::string>>   instance_keys;       // keyed by instance id
-  mutable std::unordered_map<int, std::vector<ApSeries*>>     instance_ptrs;       // parallel to instance_keys
+  mutable std::unordered_map<int, std::vector<ApSeries*>>     instance_ptrs;       // keyed by instance id
   mutable std::unordered_map<int, std::vector<PJ::PlotData*>> instance_plot_ptrs;  // write-through (instance)
   int                        stats_idx  = -1;   // index into _stats[], set in finalizeOneDef()
   bool                       finalized  = false; // true after finalizeOneDef() has run

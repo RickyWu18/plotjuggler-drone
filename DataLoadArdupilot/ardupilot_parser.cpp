@@ -445,15 +445,15 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
       def.instance_idx < static_cast<int>(def.fields.size()))
     instance = static_cast<int>(values[def.instance_idx]);
 
-  // Ensure instance keys and series pointers are built on first encounter (①)
+  // Ensure instance series pointers are built on first encounter (①)
+  std::vector<ApSeries*>*     inst_ptrs  = nullptr;
+  std::vector<PJ::PlotData*>* inst_pptrs = nullptr;
   if (instance >= 0)
   {
-    auto& key_vec   = def.instance_keys[instance];
     auto& ptr_vec   = def.instance_ptrs[instance];
     auto& pplot_vec = def.instance_plot_ptrs[instance];
-    if (key_vec.empty())
+    if (ptr_vec.empty())
     {
-      key_vec.resize(def.fields.size());
       ptr_vec.resize(def.fields.size(), nullptr);
       if (_plotSink) pplot_vec.resize(def.fields.size(), nullptr);
       const std::string prefix = def.name + "/" + (_hashInstance ? "#" : "") + std::to_string(instance);
@@ -462,8 +462,8 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
         const auto& f = def.fields[j];
         if (!f.is_string && !f.is_array)
         {
-          key_vec[j] = prefix + "/" + f.label;
-          ptr_vec[j] = &_series[key_vec[j]];
+          const std::string key = prefix + "/" + f.label;
+          ptr_vec[j] = &_series[key];
           if (_plotSink)
           {
             std::string unit_str;
@@ -472,11 +472,13 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
               auto uit = _unitTable.find(f.unit_id);
               if (uit != _unitTable.end()) unit_str = uit->second;
             }
-            pplot_vec[j] = _plotSink(key_vec[j], unit_str);
+            pplot_vec[j] = _plotSink(key, unit_str);
           }
         }
       }
     }
+    inst_ptrs  = &ptr_vec;
+    inst_pptrs = &pplot_vec;
   }
 
   // Emit numeric series (hot path: use cached ApSeries* to skip per-sample string hash)
@@ -489,9 +491,9 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
 
     // Resolve ApSeries pointer: cached for non-instance (finalizeDefs) and instance (first encounter above)
     ApSeries* sp;
-    if (instance >= 0)
+    if (inst_ptrs)
     {
-      sp = def.instance_ptrs[instance][i];
+      sp = (*inst_ptrs)[i];
     }
     else if (i < def.series_ptrs.size() && def.series_ptrs[i])
     {
@@ -528,16 +530,10 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
 
     // Resolve write-through PlotData* (⑤): cached alongside series_ptrs / instance_ptrs
     PJ::PlotData* pp = nullptr;
-    if (instance >= 0)
-    {
-      auto pit = def.instance_plot_ptrs.find(instance);
-      if (pit != def.instance_plot_ptrs.end() && i < pit->second.size())
-        pp = pit->second[i];
-    }
+    if (inst_pptrs && i < inst_pptrs->size())
+      pp = (*inst_pptrs)[i];
     else if (i < def.plot_ptrs.size())
-    {
       pp = def.plot_ptrs[i];
-    }
 
     if (pp)
       pp->pushBack({timestamp, scaled});
