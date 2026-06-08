@@ -11,14 +11,19 @@
 #include <QFile>
 #include <QHeaderView>
 #include <QMessageBox>
+#include <QPair>
 #include <QRegularExpression>
 #include <QSettings>
+#include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTextStream>
+#include <QVBoxLayout>
+#include <QVector>
 
 ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
                                          const std::vector<ApEmbeddedFile>& files,
                                          const std::vector<ApLogMessage>& msgs,
+                                         const ApLoadStats& stats,
                                          QWidget* parent)
   : QDialog(parent), ui(new Ui::ArdupilotInfoDialog), _embeddedFiles(files)
 {
@@ -106,6 +111,13 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
   }
   mtable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
   mtable->setUpdatesEnabled(true);
+
+#ifdef ARDUPILOT_DEBUG_TAB
+  // --- Debug tab (RelWithDebInfo builds only) ---
+  setupDebugTab(stats);
+#else
+  Q_UNUSED(stats);
+#endif
 }
 
 ArdupilotInfoDialog::~ArdupilotInfoDialog()
@@ -214,6 +226,51 @@ void ArdupilotInfoDialog::exportFilesToFolder(const QList<QModelIndex>& rows)
 
   QMessageBox::information(this, "Export Complete", msg);
 }
+
+#ifdef ARDUPILOT_DEBUG_TAB
+void ArdupilotInfoDialog::setupDebugTab(const ApLoadStats& stats)
+{
+  const double file_mb  = stats.file_size / (1024.0 * 1024.0);
+
+  const double load_mb_s     = stats.load_ms > 0 ? file_mb / (stats.load_ms / 1000.0) : 0.0;
+  const double samples_per_s = stats.load_ms > 0
+      ? static_cast<double>(stats.total_samples) / (stats.load_ms / 1000.0) : 0.0;
+  const double avg_per_series = stats.series_count > 0
+      ? static_cast<double>(stats.total_samples) / stats.series_count : 0.0;
+
+  const QVector<QPair<QString, QString>> rows = {
+    { "File size",          QString::number(file_mb, 'f', 2) + " MB" },
+    { "Load time",          QString::number(stats.load_ms) + " ms" },
+    { "Total samples",      QString::number(static_cast<qulonglong>(stats.total_samples)) },
+    { "Numeric series",     QString::number(static_cast<qulonglong>(stats.series_count)) },
+    { "Avg samples/series", QString::number(avg_per_series, 'f', 0) },
+    { "Throughput",         QString::number(load_mb_s, 'f', 1) + " MB/s" },
+    { "Sample rate",        QString::number(samples_per_s / 1e6, 'f', 2) + " M samples/s" },
+  };
+
+  auto* tab    = new QWidget();
+  auto* layout = new QVBoxLayout(tab);
+  auto* table  = new QTableWidget(rows.size(), 2, tab);
+
+  table->setHorizontalHeaderLabels({ "Metric", "Value" });
+  table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+  table->setSelectionBehavior(QAbstractItemView::SelectRows);
+  table->verticalHeader()->setVisible(false);
+  table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+  table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+
+  for (int row = 0; row < rows.size(); row++)
+  {
+    table->setItem(row, 0, new QTableWidgetItem(rows[row].first));
+    auto* valItem = new QTableWidgetItem(rows[row].second);
+    valItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    table->setItem(row, 1, valItem);
+  }
+
+  layout->addWidget(table);
+  ui->tabWidget->addTab(tab, "Debug");
+}
+#endif
 
 void ArdupilotInfoDialog::saveSettings()
 {

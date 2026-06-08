@@ -4,11 +4,16 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
 #include <unordered_map>
+
+#include <PlotJuggler/plotdata.h>
+
+struct ApSeries;  // forward declaration for ApMessageDef::series_ptrs / instance_ptrs
 
 struct ApFieldDef
 {
@@ -24,15 +29,20 @@ struct ApFieldDef
 
 struct ApMessageDef
 {
-  uint8_t                  msg_type      = 0;
-  uint8_t                  msg_len       = 0;
+  uint8_t                  msg_type             = 0;
+  uint8_t                  msg_len              = 0;
   std::string              name;
   std::vector<ApFieldDef>  fields;
-  int                      timestamp_idx = -1;
-  int                      instance_idx  = -1;
-  std::vector<std::string> series_keys;   // pre-built "Name/Field" per field (non-instance only)
-  int                      stats_idx     = -1;   // index into _stats[], set in finalizeDefs()
-  size_t                   data_count    = 0;    // data packets seen in pass 1, used for reserve
+  int                      timestamp_idx        = -1;
+  int                      timestamp_byte_offset = -1;  // pre-cached byte offset of TimeUS field
+  int                      instance_idx         = -1;
+  std::vector<std::string>     series_keys;         // pre-built "Name/Field" per field (non-instance only)
+  std::vector<ApSeries*>       series_ptrs;         // parallel to series_keys; cached ApSeries*
+  std::vector<PJ::PlotData*>   plot_ptrs;           // parallel to series_keys; write-through PlotData*
+  mutable std::unordered_map<int, std::vector<ApSeries*>>     instance_ptrs;       // keyed by instance id
+  mutable std::unordered_map<int, std::vector<PJ::PlotData*>> instance_plot_ptrs;  // write-through (instance)
+  int                        stats_idx  = -1;   // index into _stats[], set in finalizeOneDef()
+  bool                       finalized  = false; // true after finalizeOneDef() has run
 };
 
 struct ApFmtuPending
@@ -45,7 +55,8 @@ struct ApSeries
 {
   std::vector<std::pair<double,double>> points;   // interleaved {timestamp, value}
   std::string unit;
-  char        unit_id = '?';
+  char        unit_id       = '?';
+  bool        unit_resolved = false;  // set after first resolution attempt; _unitTable is complete before decode
 };
 
 using ApSeriesMap = std::unordered_map<std::string, ApSeries>;
@@ -78,11 +89,13 @@ class ArdupilotParser
 {
 public:
   using ProgressCallback = std::function<bool(size_t pos, size_t total)>;
+  using PlotSink         = std::function<PJ::PlotData*(const std::string& key, const std::string& unit)>;
 
   explicit ArdupilotParser(const uint8_t* data, size_t length,
                            bool loadFiles = true,
                            bool hashInstance = false,
-                           ProgressCallback progressCb = nullptr);
+                           ProgressCallback progressCb = nullptr,
+                           PlotSink plotSink = nullptr);
 
   const ApSeriesMap&                    getSeriesMap()      const { return _series;        }
   const std::vector<ApMessageStats>&   getMessageStats()   const { return _stats;         }
@@ -93,9 +106,8 @@ public:
 
 private:
   void parse();
-  bool buildTables();   // pass 1: populate _fmtTable, unit/mult/fmtu tables, data_count
-  void finalizeDefs();  // pre-build series_keys, cache mult_val, init stats, reserve vectors
-  bool decodeData();    // pass 2: decode data packets using pre-built structures
+  bool parseSinglePass();                 // single scan: tables + lazy finalize + decode
+  void finalizeOneDef(ApMessageDef& def); // per-type lazy finalize (called on first data packet)
 
   static ApMessageDef buildMessageDef(const uint8_t* payload86);
   static int          fieldByteSize(char c);
@@ -121,11 +133,14 @@ private:
   bool           _loadFiles    = true;
   bool           _hashInstance = false;
   ProgressCallback _progressCb;
+  PlotSink         _plotSink;
 
-  std::unordered_map<uint8_t, ApMessageDef>  _fmtTable;
+  std::array<ApMessageDef,  256> _fmtTable;
+  bool                           _fmtValid[256]       = {};
   std::unordered_map<char,   std::string>    _unitTable;
   std::unordered_map<char,   double>         _multTable;
-  std::unordered_map<uint8_t, ApFmtuPending> _pendingFmtu;
+  std::array<ApFmtuPending,  256> _pendingFmtu;
+  bool                            _pendingFmtuValid[256] = {};
 
   uint8_t _unitMsgType = 0;
   uint8_t _multMsgType = 0;

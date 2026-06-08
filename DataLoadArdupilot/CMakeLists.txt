@@ -17,7 +17,10 @@ target_compile_definitions(DataLoadArdupilot PRIVATE
     FMT_HEADER_ONLY
     PJ_MAJOR_VERSION=${PJ_MAJOR_VERSION}
     PJ_MINOR_VERSION=${PJ_MINOR_VERSION}
-    PJ_PATCH_VERSION=${PJ_PATCH_VERSION})
+    PJ_PATCH_VERSION=${PJ_PATCH_VERSION}
+    # Show the diagnostic "Debug" tab only in RelWithDebInfo builds. This config
+    # uses the Release CRT, so it links against the prebuilt (Release) PJ base lib.
+    $<$<CONFIG:RelWithDebInfo>:ARDUPILOT_DEBUG_TAB>)
 
 target_link_libraries(DataLoadArdupilot PRIVATE
     Qt5::Core
