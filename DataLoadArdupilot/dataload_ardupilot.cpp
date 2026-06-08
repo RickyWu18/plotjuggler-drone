@@ -125,6 +125,11 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
           display_key.append("(").append(disp_unit).append(")");
 
         return &dest.getOrCreateNumeric(display_key);
+      },
+      // String series sink
+      [&](const std::string& key) -> PJ::StringSeries* {
+        std::string display_key = official_compat ? "/" + key : key;
+        return &dest.getOrCreateStringSeries(display_key);
       });
 
   if (progress_dialog.wasCanceled())

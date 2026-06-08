@@ -17,9 +17,11 @@ static constexpr int     FMT_PAYLOAD_LEN = 86;
 ArdupilotParser::ArdupilotParser(const uint8_t* data, size_t length,
                                  bool loadFiles, bool hashInstance,
                                  ProgressCallback progressCb,
-                                 PlotSink plotSink)
+                                 PlotSink plotSink,
+                                 StringSink stringSink)
   : _data(data), _length(length), _loadFiles(loadFiles), _hashInstance(hashInstance),
-    _progressCb(std::move(progressCb)), _plotSink(std::move(plotSink))
+    _progressCb(std::move(progressCb)), _plotSink(std::move(plotSink)),
+    _stringSink(std::move(stringSink))
 {
   // Seed built-in multiplier table so scaling works before MULT packets arrive
   _multTable['?'] = 1.0;
@@ -139,6 +141,14 @@ void ArdupilotParser::finalizeOneDef(ApMessageDef& def)
           def.plot_ptrs[i] = _plotSink(def.series_keys[i], unit_str);
         }
       }
+    }
+
+    if (_stringSink)
+    {
+      def.str_ptrs.resize(def.fields.size(), nullptr);
+      for (size_t i = 0; i < def.fields.size(); i++)
+        if (def.fields[i].is_string)
+          def.str_ptrs[i] = _stringSink(def.name + "/" + def.fields[i].label);
     }
   }
 }
@@ -400,13 +410,17 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
 
   // Decode all numeric fields; skip the timestamp field (P4) — extracted separately below
   size_t offset = 0;
-  double values[16] = {};   // stack buffer; max 16 fields per message
+  double values[16] = {};        // stack buffer; max 16 fields per message
+  size_t str_offsets[16] = {};   // byte offset in payload for each string field
 
   for (size_t i = 0; i < def.fields.size(); i++)
   {
     const auto& field = def.fields[i];
     if (field.is_string || field.is_array)
+    {
+      str_offsets[i] = offset;
       offset += static_cast<size_t>(field.byte_size);
+    }
     else
       values[i] = decodeField(payload, offset, field.fmt_char);
   }
@@ -446,23 +460,26 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
     instance = static_cast<int>(values[def.instance_idx]);
 
   // Ensure instance series pointers are built on first encounter (①)
-  std::vector<ApSeries*>*     inst_ptrs  = nullptr;
-  std::vector<PJ::PlotData*>* inst_pptrs = nullptr;
+  std::vector<ApSeries*>*          inst_ptrs    = nullptr;
+  std::vector<PJ::PlotData*>*      inst_pptrs   = nullptr;
+  std::vector<PJ::StringSeries*>*  inst_str_ptrs = nullptr;
   if (instance >= 0)
   {
     auto& ptr_vec   = def.instance_ptrs[instance];
     auto& pplot_vec = def.instance_plot_ptrs[instance];
+    auto& str_vec   = def.instance_str_ptrs[instance];
     if (ptr_vec.empty())
     {
       ptr_vec.resize(def.fields.size(), nullptr);
-      if (_plotSink) pplot_vec.resize(def.fields.size(), nullptr);
+      if (_plotSink)   pplot_vec.resize(def.fields.size(), nullptr);
+      if (_stringSink) str_vec.resize(def.fields.size(), nullptr);
       const std::string prefix = def.name + "/" + (_hashInstance ? "#" : "") + std::to_string(instance);
       for (size_t j = 0; j < def.fields.size(); j++)
       {
         const auto& f = def.fields[j];
+        const std::string key = prefix + "/" + f.label;
         if (!f.is_string && !f.is_array)
         {
-          const std::string key = prefix + "/" + f.label;
           ptr_vec[j] = &_series[key];
           if (_plotSink)
           {
@@ -475,10 +492,15 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
             pplot_vec[j] = _plotSink(key, unit_str);
           }
         }
+        else if (f.is_string && _stringSink)
+        {
+          str_vec[j] = _stringSink(key);
+        }
       }
     }
-    inst_ptrs  = &ptr_vec;
-    inst_pptrs = &pplot_vec;
+    inst_ptrs     = &ptr_vec;
+    inst_pptrs    = &pplot_vec;
+    inst_str_ptrs = &str_vec;
   }
 
   // Emit numeric series (hot path: use cached ApSeries* to skip per-sample string hash)
@@ -540,6 +562,28 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
     else
       series.points.push_back({timestamp, scaled});
     _totalSamples++;
+  }
+
+  // Emit string series
+  if (_stringSink)
+  {
+    for (size_t i = 0; i < def.fields.size(); i++)
+    {
+      const auto& field = def.fields[i];
+      if (!field.is_string) continue;
+
+      PJ::StringSeries* ssp = nullptr;
+      if (inst_str_ptrs && i < inst_str_ptrs->size())
+        ssp = (*inst_str_ptrs)[i];
+      else if (i < def.str_ptrs.size())
+        ssp = def.str_ptrs[i];
+
+      if (!ssp) continue;
+      const char* s = reinterpret_cast<const char*>(payload + str_offsets[i]);
+      const size_t slen = strnlen(s, static_cast<size_t>(field.byte_size));
+      if (slen > 0)
+        ssp->pushBack({ timestamp, PJ::StringRef(s, slen) });
+    }
   }
 
   // Update message statistics via pre-cached index (P3)

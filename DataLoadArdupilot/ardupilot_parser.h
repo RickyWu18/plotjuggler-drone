@@ -36,11 +36,13 @@ struct ApMessageDef
   int                      timestamp_idx        = -1;
   int                      timestamp_byte_offset = -1;  // pre-cached byte offset of TimeUS field
   int                      instance_idx         = -1;
-  std::vector<std::string>     series_keys;         // pre-built "Name/Field" per field (non-instance only)
-  std::vector<ApSeries*>       series_ptrs;         // parallel to series_keys; cached ApSeries*
-  std::vector<PJ::PlotData*>   plot_ptrs;           // parallel to series_keys; write-through PlotData*
-  mutable std::unordered_map<int, std::vector<ApSeries*>>     instance_ptrs;       // keyed by instance id
-  mutable std::unordered_map<int, std::vector<PJ::PlotData*>> instance_plot_ptrs;  // write-through (instance)
+  std::vector<std::string>         series_keys;          // pre-built "Name/Field" per field (non-instance only)
+  std::vector<ApSeries*>           series_ptrs;          // parallel to series_keys; cached ApSeries*
+  std::vector<PJ::PlotData*>       plot_ptrs;            // parallel to series_keys; write-through PlotData*
+  std::vector<PJ::StringSeries*>   str_ptrs;             // parallel; non-null for string fields (non-instance)
+  mutable std::unordered_map<int, std::vector<ApSeries*>>          instance_ptrs;       // keyed by instance id
+  mutable std::unordered_map<int, std::vector<PJ::PlotData*>>      instance_plot_ptrs;  // write-through (instance)
+  mutable std::unordered_map<int, std::vector<PJ::StringSeries*>>  instance_str_ptrs;   // string series (instance)
   int                        stats_idx  = -1;   // index into _stats[], set in finalizeOneDef()
   bool                       finalized  = false; // true after finalizeOneDef() has run
 };
@@ -90,12 +92,14 @@ class ArdupilotParser
 public:
   using ProgressCallback = std::function<bool(size_t pos, size_t total)>;
   using PlotSink         = std::function<PJ::PlotData*(const std::string& key, const std::string& unit)>;
+  using StringSink       = std::function<PJ::StringSeries*(const std::string& key)>;
 
   explicit ArdupilotParser(const uint8_t* data, size_t length,
                            bool loadFiles = true,
                            bool hashInstance = false,
                            ProgressCallback progressCb = nullptr,
-                           PlotSink plotSink = nullptr);
+                           PlotSink plotSink = nullptr,
+                           StringSink stringSink = nullptr);
 
   const ApSeriesMap&                    getSeriesMap()      const { return _series;        }
   const std::vector<ApMessageStats>&   getMessageStats()   const { return _stats;         }
@@ -134,6 +138,7 @@ private:
   bool           _hashInstance = false;
   ProgressCallback _progressCb;
   PlotSink         _plotSink;
+  StringSink       _stringSink;
 
   std::array<ApMessageDef,  256> _fmtTable;
   bool                           _fmtValid[256]       = {};
