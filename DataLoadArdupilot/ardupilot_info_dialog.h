@@ -27,7 +27,8 @@ class ArdupilotInfoDialog : public QDialog
   Q_OBJECT
 
 public:
-  explicit ArdupilotInfoDialog(const std::vector<ApParameter>& params,
+  explicit ArdupilotInfoDialog(const ApVersionInfo& ver,
+                               const std::vector<ApParameter>& params,
                                const std::vector<ApEmbeddedFile>& files,
                                const std::vector<ApLogMessage>& msgs,
                                const ApLoadStats& stats = {},
@@ -44,6 +45,7 @@ private slots:
   void onExportAll();
 
 private:
+  void setupVersionTab(const ApVersionInfo& ver);
   void exportFilesToFolder(const QList<QModelIndex>& rows);
 #ifdef ARDUPILOT_DEBUG_TAB
   void setupDebugTab(const ApLoadStats& stats);

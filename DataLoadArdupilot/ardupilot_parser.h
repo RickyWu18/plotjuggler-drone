@@ -87,6 +87,19 @@ struct ApLogMessage
   std::string message;
 };
 
+struct ApVersionInfo
+{
+  std::string firmware_str;      // VER/FWS  e.g. "ArduCopter V4.5.2"
+  uint32_t    git_hash    = 0;   // VER/GH   firmware git hash
+  uint16_t    board_sub   = 0;   // VER/BST  board subtype
+  uint8_t     board_type  = 0;   // VER/BT   board type
+  uint8_t     fw_major    = 0;   // VER/Maj
+  uint8_t     fw_minor    = 0;   // VER/Min
+  uint8_t     fw_patch    = 0;   // VER/Pat
+  uint8_t     fw_type     = 0;   // VER/FWT  0=dev, 64=beta, 128=official
+  bool        valid       = false;
+};
+
 class ArdupilotParser
 {
 public:
@@ -106,6 +119,7 @@ public:
   const std::vector<ApParameter>&      getParameters()     const { return _params;        }
   const std::vector<ApEmbeddedFile>&   getEmbeddedFiles()  const { return _embeddedFiles; }
   const std::vector<ApLogMessage>&     getLogMessages()    const { return _msgLog;        }
+  const ApVersionInfo&                 getVersionInfo()    const { return _versionInfo;   }
   size_t                               getTotalSamples()   const { return _totalSamples;  }
 
 private:
@@ -139,6 +153,7 @@ private:
   ProgressCallback _progressCb;
   PlotSink         _plotSink;
   StringSink       _stringSink;
+  uint8_t          _mavType = 0;  // MAV_TYPE from VER/BU; selects the mode name table
 
   std::array<ApMessageDef,  256> _fmtTable;
   bool                           _fmtValid[256]       = {};
@@ -153,6 +168,9 @@ private:
   uint8_t _fileMsgType = 0;
 
   double _lastTimestamp = 0.0;
+
+  ApVersionInfo _versionInfo;
+  bool          _verParsed = false;
 
   ApSeriesMap                  _series;
   std::vector<ApMessageStats>  _stats;

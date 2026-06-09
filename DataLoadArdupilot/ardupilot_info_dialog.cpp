@@ -4,6 +4,7 @@
 
 #include "ardupilot_info_dialog.h"
 #include "ui_ardupilot_info_dialog.h"
+#include "ardupilot_build_info.h"
 
 #include <QDir>
 #include <QFileDialog>
@@ -20,7 +21,8 @@
 #include <QVBoxLayout>
 #include <QVector>
 
-ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
+ArdupilotInfoDialog::ArdupilotInfoDialog(const ApVersionInfo& ver,
+                                         const std::vector<ApParameter>& params,
                                          const std::vector<ApEmbeddedFile>& files,
                                          const std::vector<ApLogMessage>& msgs,
                                          const ApLoadStats& stats,
@@ -28,6 +30,9 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ApParameter>& params,
   : QDialog(parent), ui(new Ui::ArdupilotInfoDialog), _embeddedFiles(files)
 {
   ui->setupUi(this);
+
+  // --- Version tab (first) ---
+  setupVersionTab(ver);
 
   // --- Parameters tab ---
   auto* table = ui->tableParams;
@@ -271,6 +276,42 @@ void ArdupilotInfoDialog::setupDebugTab(const ApLoadStats& stats)
   ui->tabWidget->addTab(tab, "Debug");
 }
 #endif
+
+void ArdupilotInfoDialog::setupVersionTab(const ApVersionInfo& ver)
+{
+  auto* table = ui->tableVersion;
+  table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+  table->setSelectionBehavior(QAbstractItemView::SelectRows);
+  table->verticalHeader()->setVisible(false);
+  table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+  table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+
+  auto addRow = [&](const QString& field, const QString& value) {
+    const int row = table->rowCount();
+    table->insertRow(row);
+    table->setItem(row, 0, new QTableWidgetItem(field));
+    table->setItem(row, 1, new QTableWidgetItem(value));
+  };
+
+  addRow("Firmware Version",
+         ver.valid ? QString::fromStdString(ver.firmware_str)
+                   : QStringLiteral("(not found in log)"));
+
+  // Build-time plugin info
+#ifdef ARDUPILOT_DEV_BUILD
+  constexpr const char* kBuildSuffix = "dev";
+#else
+  constexpr const char* kBuildSuffix = "";
+#endif
+  addRow("Plugin Version",
+         QString("v%1%2 (%3) @ PJ %4")
+             .arg(ARDUPILOT_PLUGIN_OWN_VERSION)
+             .arg(kBuildSuffix)
+             .arg(ARDUPILOT_PLUGIN_GIT_HASH)
+             .arg(ARDUPILOT_PJ_VERSION));
+  addRow("MAVLink Dialect Version",
+         QString("ardupilotmega (%1)").arg(ARDUPILOT_MAVLINK_GIT_HASH));
+}
 
 void ArdupilotInfoDialog::saveSettings()
 {

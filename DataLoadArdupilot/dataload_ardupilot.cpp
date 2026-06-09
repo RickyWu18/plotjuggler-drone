@@ -147,7 +147,8 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
   stats.total_samples = total_samples;
   stats.series_count  = series_map.size();
 
-  auto* dlg = new ArdupilotInfoDialog(parser.getParameters(),
+  auto* dlg = new ArdupilotInfoDialog(parser.getVersionInfo(),
+                                      parser.getParameters(),
                                       parser.getEmbeddedFiles(),
                                       parser.getLogMessages(),
                                       stats,

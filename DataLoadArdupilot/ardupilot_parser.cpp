@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 #include "ardupilot_parser.h"
+#include "ardupilot_mode_tables.h"
 
 #include <cstring>
 #include <algorithm>
@@ -147,8 +148,13 @@ void ArdupilotParser::finalizeOneDef(ApMessageDef& def)
     {
       def.str_ptrs.resize(def.fields.size(), nullptr);
       for (size_t i = 0; i < def.fields.size(); i++)
-        if (def.fields[i].is_string)
-          def.str_ptrs[i] = _stringSink(def.name + "/" + def.fields[i].label);
+      {
+        const auto& f = def.fields[i];
+        if (f.is_string)
+          def.str_ptrs[i] = _stringSink(def.name + "/" + f.label);
+        else if (f.fmt_char == 'M')
+          def.str_ptrs[i] = _stringSink(def.name + "/ModeName");
+      }
     }
   }
 }
@@ -435,6 +441,45 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
     _lastTimestamp = timestamp;
   }
 
+  // Extract all VER fields — populates _versionInfo and selects mode-name table.
+  if (def.name == "VER" && !_verParsed)
+  {
+    _verParsed = true;
+    size_t ver_off = 0;
+    for (const auto& field : def.fields)
+    {
+      const uint8_t* p = payload + ver_off;
+      if      (field.label == "BT"  && field.fmt_char == 'B') _versionInfo.board_type = *p;
+      else if (field.label == "BST" && field.fmt_char == 'H') std::memcpy(&_versionInfo.board_sub,  p, 2);
+      else if (field.label == "Maj" && field.fmt_char == 'B') _versionInfo.fw_major   = *p;
+      else if (field.label == "Min" && field.fmt_char == 'B') _versionInfo.fw_minor   = *p;
+      else if (field.label == "Pat" && field.fmt_char == 'B') _versionInfo.fw_patch   = *p;
+      else if (field.label == "FWT" && field.fmt_char == 'B') _versionInfo.fw_type    = *p;
+      else if (field.label == "GH"  && field.fmt_char == 'I') std::memcpy(&_versionInfo.git_hash,   p, 4);
+      else if (field.label == "FWS" && field.is_string)
+      {
+        const char* s = reinterpret_cast<const char*>(p);
+        _versionInfo.firmware_str.assign(s, strnlen(s, static_cast<size_t>(field.byte_size)));
+      }
+      else if (field.label == "BU" && field.fmt_char == 'B')
+      {
+        if (*p != 0) _mavType = *p;
+      }
+      ver_off += static_cast<size_t>(field.byte_size);
+    }
+    _versionInfo.valid = true;
+
+    if (_mavType == 0 && !_versionInfo.firmware_str.empty())
+    {
+      const auto& fws = _versionInfo.firmware_str;
+      if      (fws.find("Copter")  != std::string::npos) _mavType = 2;
+      else if (fws.find("Plane")   != std::string::npos) _mavType = 1;
+      else if (fws.find("Rover")   != std::string::npos) _mavType = 10;
+      else if (fws.find("Sub")     != std::string::npos) _mavType = 12;
+      else if (fws.find("Tracker") != std::string::npos) _mavType = 5;
+    }
+  }
+
   // Extract MSG text and store with timestamp
   if (def.name == "MSG")
   {
@@ -495,6 +540,10 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
         else if (f.is_string && _stringSink)
         {
           str_vec[j] = _stringSink(key);
+        }
+        else if (f.fmt_char == 'M' && _stringSink)
+        {
+          str_vec[j] = _stringSink(prefix + "/ModeName");
         }
       }
     }
@@ -564,13 +613,13 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
     _totalSamples++;
   }
 
-  // Emit string series
+  // Emit string and mode-name series
   if (_stringSink)
   {
     for (size_t i = 0; i < def.fields.size(); i++)
     {
       const auto& field = def.fields[i];
-      if (!field.is_string) continue;
+      if (!field.is_string && field.fmt_char != 'M') continue;
 
       PJ::StringSeries* ssp = nullptr;
       if (inst_str_ptrs && i < inst_str_ptrs->size())
@@ -579,10 +628,20 @@ void ArdupilotParser::parseDataPacket(const uint8_t* payload, const ApMessageDef
         ssp = def.str_ptrs[i];
 
       if (!ssp) continue;
-      const char* s = reinterpret_cast<const char*>(payload + str_offsets[i]);
-      const size_t slen = strnlen(s, static_cast<size_t>(field.byte_size));
-      if (slen > 0)
-        ssp->pushBack({ timestamp, PJ::StringRef(s, slen) });
+
+      if (field.is_string)
+      {
+        const char* s = reinterpret_cast<const char*>(payload + str_offsets[i]);
+        const size_t slen = strnlen(s, static_cast<size_t>(field.byte_size));
+        if (slen > 0)
+          ssp->pushBack({ timestamp, PJ::StringRef(s, slen) });
+      }
+      else  // fmt_char == 'M': emit human-readable mode name
+      {
+        const auto mode_sv =
+            ap_mode_tables::modeToStringView(_mavType, static_cast<uint8_t>(values[i]));
+        ssp->pushBack({ timestamp, PJ::StringRef(mode_sv.data(), mode_sv.size()) });
+      }
     }
   }
 

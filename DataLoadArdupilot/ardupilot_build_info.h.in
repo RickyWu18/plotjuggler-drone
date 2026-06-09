@@ -1,0 +1,9 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+#pragma once
+#define ARDUPILOT_PLUGIN_OWN_VERSION "@PLUGIN_OWN_VERSION@"
+#define ARDUPILOT_PLUGIN_GIT_HASH    "@PLUGIN_GIT_HASH@"
+#define ARDUPILOT_PJ_VERSION         "@PJ_MAJOR_VERSION@.@PJ_MINOR_VERSION@.@PJ_PATCH_VERSION@"
+#define ARDUPILOT_MAVLINK_GIT_HASH   "@MAVLINK_GIT_HASH@"
