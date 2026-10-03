@@ -18,17 +18,15 @@ PlotJuggler is a fast, open-source time-series visualization tool. This reposito
 
 | Plugin | Description | PJ3 support | PJ4 support |
 |---|---|:---:|:---:|
-| **DataStreamMavlink** | Streams live MAVLink telemetry over UDP, TCP, or Serial into PlotJuggler. Automatically discovers all message fields and populates them as time-series. Includes a built-in **Message Interval** dialog to inspect and tune per-message update rates on the vehicle (PJ3 only; the PJ4 version is receive-only). | ✅ | 🚧 |
-| **DataLoadArdupilot** | Loads ArduPilot `.BIN` flight logs directly into PlotJuggler. All numeric fields are automatically available as plot series, with correct units applied. A post-load dialog shows flight **Parameters**, **Embedded Files**, and **Messages** from the log. | ✅ | 🚧 |
-
-✅ supported · 🚧 planned / in progress
+| **DataStreamMavlink** | Streams live MAVLink telemetry over UDP, TCP, or Serial into PlotJuggler. Automatically discovers all message fields and populates them as time-series. Includes a built-in **Message Interval** dialog to inspect and tune per-message update rates on the vehicle (PJ3 only; the PJ4 version is receive-only). | ✅ | ✅ |
+| **DataLoadArdupilot** | Loads ArduPilot `.BIN` flight logs directly into PlotJuggler. All numeric fields are automatically available as plot series, with correct units applied. A post-load dialog shows flight **Parameters**, **Embedded Files**, and **Messages** from the log. | ✅ | ✅ |
 
 ### DataStreamMavlink — Feature Highlights
 
 - **Three transports:** UDP (default port 14550), TCP client, and Serial port — switchable from the connection dialog.
 - **Zero-config field discovery:** every numeric field in every MAVLink message is automatically mapped to a plot series named `mav/<sysid>.<compid>/<MSG_NAME>/<field>`.
 - **Multi-vehicle:** differentiates streams by `sysid.compid`, so data from multiple vehicles on the same link is kept separate.
-- **Message Interval control:** via the **"Message Intervals…"** toolbar action, view live message rates and send `SET_MESSAGE_INTERVAL` commands back to the vehicle to tune what gets streamed and how fast.
+- **Message Interval control (PJ3 only):** via the **"Message Intervals…"** toolbar action, view live message rates and send `SET_MESSAGE_INTERVAL` commands back to the vehicle to tune what gets streamed and how fast.
 
 ### DataLoadArdupilot — Feature Highlights
 
@@ -60,7 +58,9 @@ PlotJuggler is a fast, open-source time-series visualization tool. This reposito
 
 ### PJ4 (PlotJuggler 4.x)
 
-> 🚧 No released plugins yet.
+1. **Install PlotJuggler 4.x.**
+2. **Download the plugin** from the [Releases](https://github.com/RickyWu18/plotjuggler-drone/releases) page. Each package contains the plugin library and its manifest. The PJ4 plugins require `plotjuggler_sdk` >= 0.34.1.
+3. **Copy both files into the plugin directory** scanned by the PJ4 host, then restart PlotJuggler.
 
 ---
 
