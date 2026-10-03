@@ -31,6 +31,9 @@ if(PJ_BUILD_TESTS)
   enable_testing()
 endif()
 
+# Host-independent code shared by the drone plugins (PJ3 and PJ4).
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../core ${CMAKE_BINARY_DIR}/core)
+
 # One subdirectory per plugin under plugins/ (each has its own CMakeLists.txt).
 file(GLOB plugin_dirs RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/plugins ${CMAKE_CURRENT_SOURCE_DIR}/plugins/*)
 foreach(dir ${plugin_dirs})

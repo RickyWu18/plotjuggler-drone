@@ -16,6 +16,12 @@ and the `plotjuggler-plugin` skill before writing a plugin). Reference plugins: 
 - Warnings are errors (`PJ_WARNING_FLAGS`). Style: Google clang-format, 120 columns (`pre-commit run -a`).
 - Windows: use the `Git Bash (VS Dev)` profile (`../../.vscode/settings.json`) so `cl` is on PATH.
 
+## Shared code
+
+`../core/` (`pj_drone::core`, pure C++20, no Qt / SDK) holds what both PJ3 and PJ4 plugins can share: the ArduPilot
+BIN parser (`SampleSink` interface), parameter/file export helpers and a memory-mapped file. Plugins link it; keep SDK
+types out of it. Its tests (`pj_drone_core_test`) run with `./test.sh`.
+
 ## Package
 
 `./package.sh` zips built plugins into `dist/` (after `./build.sh`). Manifests need `category` and

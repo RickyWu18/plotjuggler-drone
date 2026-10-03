@@ -1,0 +1,10 @@
+{
+  "id": "drone-ardupilot-loader",
+  "name": "ArduPilot BIN Loader",
+  "version": "0.1.0",
+  "description": "Data loader for ArduPilot DataFlash .BIN logs, with a parameters / messages / embedded files viewer.",
+  "category": "data_loader",
+  "tags": ["ardupilot", "bin", "dataflash", "drone", "flight"],
+  "file_extensions": [".bin", ".BIN"],
+  "min_sdk_required": "0.34.1"
+}
