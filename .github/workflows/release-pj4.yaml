@@ -1,0 +1,177 @@
+name: Release PJ4
+
+# Same model as PlotJuggler/pj-official-plugins: one release per plugin, tagged <plugin_dir>/vX.Y.Z
+# (e.g. data_load_ardupilot/v0.1.0, data_stream_mavlink/v0.1.0). The tag's version must match the
+# plugin's manifest.json and only that plugin is built. workflow_dispatch builds + tests every
+# plugin but publishes nothing.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['*/v*']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: pj4
+
+jobs:
+  build:
+    name: ${{ matrix.os_label }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x86_64
+            os_label: linux
+          - runner: ubuntu-22.04-arm
+            arch: aarch64
+            os_label: linux
+          # Pinned to windows-2022: the VS18/MSVC 14.5x image breaks some Conan dependency builds
+          # (see pj-official-plugins ci-windows.yml).
+          - runner: windows-2022
+            arch: x64
+            os_label: windows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      # Tag <plugin>/vX.Y.Z -> build only that plugin; workflow_dispatch -> everything.
+      - name: Resolve build scope
+        id: scope
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == */* ]]; then
+            PLUGIN="${GITHUB_REF_NAME%%/*}"
+            [[ -f "plugins/${PLUGIN}/manifest.json" ]] || { echo "::error::Unknown plugin '${PLUGIN}' in tag ${GITHUB_REF_NAME}"; exit 1; }
+            echo "plugin=${PLUGIN}" >> "$GITHUB_OUTPUT"
+            echo "build_dir=build/${PLUGIN}" >> "$GITHUB_OUTPUT"
+          else
+            echo "plugin=" >> "$GITHUB_OUTPUT"
+            echo "build_dir=build/all" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Conan
+        id: setup-conan
+        uses: conan-io/setup-conan@v1.3.0
+
+      - name: Restore Conan package cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.setup-conan.outputs.conan-home }}/p
+          key: conan-${{ steps.setup-conan.outputs.conan-version }}-${{ runner.os }}-${{ matrix.arch }}-${{ steps.scope.outputs.plugin || 'all' }}-${{ hashFiles('pj4/conanfile.py', 'pj4/SDK_VERSION') }}
+          restore-keys: |
+            conan-${{ steps.setup-conan.outputs.conan-version }}-${{ runner.os }}-${{ matrix.arch }}-${{ steps.scope.outputs.plugin || 'all' }}-
+
+      # ninja 1.13.0 corrupts MSVC link response files (LNK1181); pin the last good PyPI release.
+      - name: Install cmake and ninja
+        run: pip install cmake "ninja==1.11.1.4"
+
+      - name: Set up MSVC environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Detect Conan profile
+        run: conan profile detect --force
+
+      # build.sh runs scripts/ensure_sdk.sh first: plotjuggler_sdk/<SDK_VERSION> is built from
+      # the v<SDK_VERSION> git tag into the Conan cache, then only the tagged plugin is built
+      # (and only its Conan deps fetched); no plugin argument builds everything.
+      - name: Build
+        run: ./build.sh ${{ steps.scope.outputs.plugin }}
+
+      - name: Test
+        run: ctest --test-dir "${{ steps.scope.outputs.build_dir }}" -C Release -V --output-on-failure
+
+      - name: Verify plugin version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          python3 scripts/release_tools.py verify-version-consistency \
+            --release-tag "${{ github.ref_name }}" \
+            --build-dir "${{ steps.scope.outputs.build_dir }}/bin" \
+            --check-manifest
+
+      - name: Package artifacts
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          rm -rf dist
+          ZIP_NAME=$(python3 scripts/release_tools.py create-distribution-package \
+            --release-tag "${{ github.ref_name }}" \
+            --build-dir "${{ steps.scope.outputs.build_dir }}/bin" \
+            --output-dir dist \
+            --os-label "${{ matrix.os_label }}" \
+            --arch "${{ matrix.arch }}")
+          echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
+
+      - name: Compress artifacts (Linux)
+        if: startsWith(github.ref, 'refs/tags/') && runner.os != 'Windows'
+        run: cd dist && zip -r "../${{ env.ZIP_NAME }}" .
+
+      - name: Compress artifacts (Windows)
+        if: startsWith(github.ref, 'refs/tags/') && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\* -DestinationPath "$env:ZIP_NAME"
+          Write-Host "Package created: $env:ZIP_NAME"
+
+      - name: Generate checksum (Linux)
+        if: startsWith(github.ref, 'refs/tags/') && runner.os != 'Windows'
+        run: |
+          sha256sum "${{ env.ZIP_NAME }}" > "${{ env.ZIP_NAME }}.sha256"
+          cat "${{ env.ZIP_NAME }}.sha256"
+
+      - name: Generate checksum (Windows)
+        if: startsWith(github.ref, 'refs/tags/') && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Algorithm SHA256 "$env:ZIP_NAME").Hash.ToLower()
+          "$hash  $env:ZIP_NAME" | Out-File -Encoding ascii "$env:ZIP_NAME.sha256"
+          Get-Content "$env:ZIP_NAME.sha256"
+
+      - name: Upload artifact
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: pj4/${{ env.ZIP_NAME }}
+
+      # Notes are generated once (linux-x86_64 leg) and attached together with its zip.
+      - name: Generate release notes
+        if: startsWith(github.ref, 'refs/tags/') && matrix.runner == 'ubuntu-22.04'
+        run: |
+          git fetch --tags --force --unshallow || git fetch --tags --force
+          python3 scripts/release_tools.py generate-release-notes \
+            --release-tag "${{ github.ref_name }}" \
+            --output release-notes.md
+
+      - name: Upload to Release with notes
+        if: startsWith(github.ref, 'refs/tags/') && matrix.runner == 'ubuntu-22.04'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            pj4/${{ env.ZIP_NAME }}
+            pj4/${{ env.ZIP_NAME }}.sha256
+          body_path: pj4/release-notes.md
+          fail_on_unmatched_files: true
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/') && matrix.runner != 'ubuntu-22.04'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            pj4/${{ env.ZIP_NAME }}
+            pj4/${{ env.ZIP_NAME }}.sha256
+          fail_on_unmatched_files: true

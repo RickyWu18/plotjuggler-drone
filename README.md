@@ -18,7 +18,7 @@ PlotJuggler is a fast, open-source time-series visualization tool. This reposito
 
 | Plugin | Description | PJ3 support | PJ4 support |
 |---|---|:---:|:---:|
-| **DataStreamMavlink** | Streams live MAVLink telemetry over UDP, TCP, or Serial into PlotJuggler. Automatically discovers all message fields and populates them as time-series. Includes a built-in **Message Interval** dialog to inspect and tune per-message update rates on the vehicle. | ✅ | 🚧 |
+| **DataStreamMavlink** | Streams live MAVLink telemetry over UDP, TCP, or Serial into PlotJuggler. Automatically discovers all message fields and populates them as time-series. Includes a built-in **Message Interval** dialog to inspect and tune per-message update rates on the vehicle (PJ3 only; the PJ4 version is receive-only). | ✅ | 🚧 |
 | **DataLoadArdupilot** | Loads ArduPilot `.BIN` flight logs directly into PlotJuggler. All numeric fields are automatically available as plot series, with correct units applied. A post-load dialog shows flight **Parameters**, **Embedded Files**, and **Messages** from the log. | ✅ | 🚧 |
 
 ✅ supported · 🚧 planned / in progress
@@ -60,7 +60,7 @@ PlotJuggler is a fast, open-source time-series visualization tool. This reposito
 
 ### PJ4 (PlotJuggler 4.x)
 
-> 🚧 Not available yet. See [pj4/README.md](pj4/README.md).
+> 🚧 No released plugins yet.
 
 ---
 
@@ -72,7 +72,7 @@ See [pj3/docs/build.md](pj3/docs/build.md) for workspace layout, PlotJuggler set
 
 ### PJ4 (PlotJuggler 4.x)
 
-> 🚧 Not available yet. See [pj4/README.md](pj4/README.md).
+See [pj4/docs/build.md](pj4/docs/build.md) for prerequisites, the `plotjuggler_sdk` setup, and build/package instructions. To add a plugin, see [pj4/docs/develop.md](pj4/docs/develop.md).
 
 ---
 

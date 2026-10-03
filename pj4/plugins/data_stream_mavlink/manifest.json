@@ -1,0 +1,9 @@
+{
+  "id": "drone-mavlink-streamer",
+  "name": "MAVLink Streamer",
+  "version": "0.1.0",
+  "description": "Streams live MAVLink telemetry over UDP, TCP or a serial port; every numeric field becomes a series.",
+  "category": "data_stream",
+  "tags": ["mavlink", "px4", "ardupilot", "drone", "telemetry", "stream", "realtime"],
+  "min_sdk_required": "0.34.1"
+}
