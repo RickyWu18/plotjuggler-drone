@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-10-03
 
 ### Added
 - First PJ4 port of the PJ3 `DataLoadArdupilot` plugin: loads ArduPilot DataFlash `.BIN` logs.
