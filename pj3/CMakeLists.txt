@@ -8,6 +8,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 
+# Repo root, holding components shared by pj3/ and pj4/ (3rdparty/, docs/)
+get_filename_component(DRONE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+
 # ── Qt ─────────────────────────────────────────────────────────────────────
 find_package(Qt5 REQUIRED COMPONENTS Core Widgets Xml Network)
 
@@ -15,9 +18,9 @@ find_package(Qt5 REQUIRED COMPONENTS Core Widgets Xml Network)
 # Point PJ_INSTALL at the prefix where PlotJuggler was installed.
 # Default assumes the canonical workspace layout:
 #   <ws>/
-#     src/PlotJuggler-Drone/   <- here
-#     install/                 <- PJ_INSTALL
-set(PJ_INSTALL "${CMAKE_CURRENT_SOURCE_DIR}/../../install"
+#     src/PlotJuggler-Drone/pj3/  <- here
+#     install/                    <- PJ_INSTALL
+set(PJ_INSTALL "${CMAKE_CURRENT_SOURCE_DIR}/../../../install"
     CACHE PATH "PlotJuggler install prefix (contains bin/, include/, lib/)")
 
 find_library(PJ_BASE_LIB NAMES plotjuggler_base REQUIRED
@@ -28,7 +31,7 @@ find_library(PJ_QWT_LIB  NAMES plotjuggler_qwt  REQUIRED
 set(PJ_INCLUDE_DIR "${PJ_INSTALL}/include")
 
 # Plugins are installed alongside plotjuggler.exe so they are auto-discovered.
-set(PJ_PLUGIN_INSTALL_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../build/Plotjuggler/bin"
+set(PJ_PLUGIN_INSTALL_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/Plotjuggler/bin"
     CACHE PATH "Destination for plugin DLLs/SOs")
 
 # Read PlotJuggler version from the installed ConfigVersion file

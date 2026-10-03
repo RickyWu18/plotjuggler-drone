@@ -3,7 +3,7 @@ find_package(Qt5 COMPONENTS SerialPort Network QUIET)
 if(Qt5SerialPort_FOUND AND Qt5Network_FOUND)
   message(STATUS "[DataStreamMavlink] Qt5::SerialPort and Qt5::Network found")
 
-  set(MAVLINK_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/c_library_v2")
+  set(MAVLINK_INCLUDE_DIR "${DRONE_ROOT_DIR}/3rdparty/c_library_v2")
 
   set(SRC
     mavlink/mavlink_constants.h
