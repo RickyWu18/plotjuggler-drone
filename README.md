@@ -60,7 +60,7 @@ PlotJuggler is a fast, open-source time-series visualization tool. This reposito
 
 ### PJ4 (PlotJuggler 4.x)
 
-> 🚧 Not available yet. See [pj4/README.md](pj4/README.md).
+> 🚧 No released plugins yet.
 
 ---
 
@@ -72,7 +72,7 @@ See [pj3/docs/build.md](pj3/docs/build.md) for workspace layout, PlotJuggler set
 
 ### PJ4 (PlotJuggler 4.x)
 
-> 🚧 Not available yet. See [pj4/README.md](pj4/README.md).
+See [pj4/docs/build.md](pj4/docs/build.md) for prerequisites, the `plotjuggler_sdk` setup, and build/package instructions. To add a plugin, see [pj4/docs/develop.md](pj4/docs/develop.md).
 
 ---
 
