@@ -109,7 +109,7 @@ jobs:
           fail_on_unmatched_files: true
 
   windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     permissions:
       contents: write
     env:
