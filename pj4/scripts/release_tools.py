@@ -799,7 +799,7 @@ def cmd_verify_version_consistency(args) -> int:
     Used in CI after building to ensure the release is consistent.
     """
     script_dir = Path(__file__).parent
-    root = script_dir.parent
+    root = script_dir.parent / "plugins"  # pj4: plugins live under plugins/
 
     # Parse release tag if provided
     if args.release_tag:
@@ -1257,7 +1257,7 @@ def cmd_generate_release_notes(args) -> int:
     with optional shared release/build changes separated explicitly.
     """
     script_dir = Path(__file__).parent
-    root = script_dir.parent
+    root = script_dir.parent  # git cwd (pj4/); plugin dirs live in root / "plugins"
 
     parsed = parse_tag_version(args.release_tag)
     if not parsed:
@@ -1266,7 +1266,7 @@ def cmd_generate_release_notes(args) -> int:
         return 1
 
     source_name, version = parsed
-    source_dir = find_source_dir(source_name, root)
+    source_dir = find_source_dir(source_name, root / "plugins")
     if not source_dir:
         print(f"Error: Source directory not found: {source_name}", file=sys.stderr)
         return 1
@@ -1279,14 +1279,14 @@ def cmd_generate_release_notes(args) -> int:
 
     previous_tag = args.previous_tag or find_previous_release_tag(root, source_name, args.release_tag)
     revision_range = f"{previous_tag}..{args.release_tag}" if previous_tag else args.release_tag
-    plugin_commits = list_commits_for_paths(root, revision_range, [source_name])
+    plugin_commits = list_commits_for_paths(root, revision_range, [f"plugins/{source_name}"])
 
     shared_commits = []
     if args.include_shared:
         shared_paths = [
-            ".github/workflows/build-release.yml",
+            "../.github/workflows/release-pj4.yaml",
+            "../core",
             "CMakeLists.txt",
-            "cmake",
             "conanfile.py",
             "SDK_VERSION",
             "scripts",
