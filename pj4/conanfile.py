@@ -16,6 +16,7 @@ class PjDronePluginsConan(ConanFile):
         f"plotjuggler_sdk/{_SDK_VERSION}",
         "nlohmann_json/3.12.0",
         "gtest/1.17.0",
+        "asio/1.28.2",
         # Add per-plugin deps here (e.g. mavlink parsing helpers) as plugins are ported.
     )
     default_options = {"*:shared": False}
