@@ -18,7 +18,7 @@ plotjuggler_ws/
 ```bash
 mkdir plotjuggler_ws
 cd plotjuggler_ws
-git clone https://github.com/PlotJuggler/PlotJuggler.git src/PlotJuggler
+git clone -b main https://github.com/PlotJuggler/PlotJuggler.git src/PlotJuggler
 git clone --recurse-submodules https://github.com/RickyWu18/plotjuggler-drone.git src/PlotJuggler-Drone
 ```
 
@@ -43,13 +43,13 @@ git clone --recurse-submodules https://github.com/RickyWu18/plotjuggler-drone.gi
 
 ### Build
 
-```batch
+```powershell
 set VCPKG_ROOT=C:\path\to\vcpkg
 
 cmake -G "Visual Studio 16 2019" `
-      -S src\PlotJuggler-Drone `
+      -S src\PlotJuggler-Drone\pj3 `
       -B build\PlotJuggler-Drone `
-      -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg
+      -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
 
 cmake --build build\PlotJuggler-Drone --config Release --target install
 ```

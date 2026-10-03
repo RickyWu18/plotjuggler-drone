@@ -46,7 +46,7 @@ add_subdirectory(DataStreamDrone)
 5. Re-configure and build:
 
 ```batch
-cmake -S src\PlotJuggler-Drone -B build\PlotJuggler-Drone
+cmake -S src\PlotJuggler-Drone\pj3 -B build\PlotJuggler-Drone
 cmake --build build\PlotJuggler-Drone --config Release --target install
 ```
 

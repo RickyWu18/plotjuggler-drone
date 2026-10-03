@@ -1,10 +1,10 @@
-name: Release / Windows
+name: Release PJ3 / Ubuntu
 
 on:
   workflow_dispatch:
   push:
     tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
+      - 'pj3-v[0-9]+.[0-9]+.[0-9]+'
 
 env:
   PJ_TAG: '3.17.2'
@@ -14,12 +14,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  ubuntu:
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     env:
-      CXXFLAGS: /MP
       CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm_cache
 
     steps:
@@ -34,69 +33,67 @@ jobs:
         uses: actions/cache@v5
         with:
           path: pj_install
-          key: pj-install-windows-${{ env.PJ_TAG }}
+          key: pj-install-ubuntu-${{ env.PJ_TAG }}
 
       - name: Clone PlotJuggler ${{ env.PJ_TAG }}
         if: steps.cache-pj.outputs.cache-hit != 'true'
-        shell: pwsh
         run: |
-          git clone --depth 1 --branch ${{ env.PJ_TAG }} `
+          git clone --depth 1 --branch ${{ env.PJ_TAG }} \
             https://github.com/facontidavide/PlotJuggler.git PlotJuggler
 
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: '5.15.*'
-          arch: 'win64_msvc2019_64'
-          dir: '${{ github.workspace }}/qt_installation/'
-          cache: 'true'
+      - name: Install Qt5 and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qtbase5-dev \
+            libqt5svg5-dev \
+            libqt5websockets5-dev \
+            libqt5opengl5-dev \
+            libqt5x11extras5-dev \
+            libqt5serialport5-dev \
+            libprotoc-dev \
+            libmosquitto-dev \
+            libcurl4-openssl-dev \
+            zip
 
       - name: Cache CPM packages
         if: steps.cache-pj.outputs.cache-hit != 'true'
         uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/cpm_cache
-          key: cpm-windows-pj-${{ env.PJ_TAG }}
-          restore-keys: cpm-windows-
+          key: cpm-ubuntu-pj-${{ env.PJ_TAG }}
+          restore-keys: cpm-ubuntu-
 
       - name: Configure PlotJuggler
         if: steps.cache-pj.outputs.cache-hit != 'true'
-        shell: pwsh
         run: |
-          cmake -S PlotJuggler -B pj_build `
-            -A x64 `
-            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/pj_install" `
-            -DPJ_INSTALLATION=windows `
-            -DPJ_PLUGINS_DIRECTORY=bin
+          cmake -S PlotJuggler -B pj_build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/pj_install
 
       - name: Build PlotJuggler
         if: steps.cache-pj.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: cmake --build pj_build --config Release --parallel
+        run: cmake --build pj_build -- -j$(nproc)
 
       - name: Install PlotJuggler
         if: steps.cache-pj.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: cmake --install pj_build --config Release
+        run: cmake --install pj_build
 
       - name: Configure drone plugins
-        shell: pwsh
         run: |
-          cmake -S drone -B drone_build `
-            -A x64 `
-            "-DPJ_INSTALL=${{ github.workspace }}/pj_install"
+          cmake -S drone/pj3 -B drone_build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPJ_INSTALL=${{ github.workspace }}/pj_install
 
       - name: Build drone plugins
-        shell: pwsh
-        run: cmake --build drone_build --config Release --parallel
+        run: cmake --build drone_build -- -j$(nproc)
 
       - name: Package plugins
-        shell: pwsh
         run: |
-          $ref = "${{ github.ref_name }}" -replace '/', '-'
-          $zipName = "PlotJuggler-Drone-$ref-Windows-x64.zip"
-          Compress-Archive -Path drone_build/bin/Release/*.dll -DestinationPath $zipName
-          "ZIP_NAME=$zipName" | Out-File -FilePath $env:GITHUB_ENV -Append
+          SAFE_REF="${GITHUB_REF_NAME//\//-}"
+          ZIP_NAME="PlotJuggler-Drone-${SAFE_REF}-Ubuntu-x86_64.zip"
+          zip -j "$ZIP_NAME" drone_build/bin/*.so
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

@@ -16,10 +16,12 @@ PlotJuggler is a fast, open-source time-series visualization tool. This reposito
 
 ## Available Plugins
 
-| Plugin | Description |
-|---|---|
-| **DataStreamMavlink** | Streams live MAVLink telemetry over UDP, TCP, or Serial into PlotJuggler. Automatically discovers all message fields and populates them as time-series. Includes a built-in **Message Interval** dialog to inspect and tune per-message update rates on the vehicle. |
-| **DataLoadArdupilot** | Loads ArduPilot `.BIN` flight logs directly into PlotJuggler. All numeric fields are automatically available as plot series, with correct units applied. A post-load dialog shows flight **Parameters**, **Embedded Files**, and **Messages** from the log. |
+| Plugin | Description | PJ3 support | PJ4 support |
+|---|---|:---:|:---:|
+| **DataStreamMavlink** | Streams live MAVLink telemetry over UDP, TCP, or Serial into PlotJuggler. Automatically discovers all message fields and populates them as time-series. Includes a built-in **Message Interval** dialog to inspect and tune per-message update rates on the vehicle. | ✅ | 🚧 |
+| **DataLoadArdupilot** | Loads ArduPilot `.BIN` flight logs directly into PlotJuggler. All numeric fields are automatically available as plot series, with correct units applied. A post-load dialog shows flight **Parameters**, **Embedded Files**, and **Messages** from the log. | ✅ | 🚧 |
+
+✅ supported · 🚧 planned / in progress
 
 ### DataStreamMavlink — Feature Highlights
 
@@ -43,37 +45,34 @@ PlotJuggler is a fast, open-source time-series visualization tool. This reposito
 
 ## How to Use
 
-### 1. Install PlotJuggler
+### PJ3 (PlotJuggler 3.x)
 
-Download and install the latest PlotJuggler release from the [official GitHub releases page](https://github.com/facontidavide/PlotJuggler/releases).
+1. **Install PlotJuggler 3.x** from the [official GitHub releases page](https://github.com/facontidavide/PlotJuggler/releases).
+2. **Download the plugin** for your platform from the [Releases](https://github.com/RickyWu18/plotjuggler-drone/releases) page of this repository.
+3. **Drop it into the PlotJuggler plugin folder.** Add a custom folder in PlotJuggler Preferences, or place the file where PlotJuggler looks for plugins:
 
-### 2. Download the plugin
+   | Platform | Plugin path |
+   |---|---|
+   | Windows | Same folder as `plotjuggler.exe` (e.g. `C:\Program Files\PlotJuggler\`) |
+   | Linux | Same folder as the `plotjuggler` binary (e.g. `/usr/local/bin/`) |
 
-Grab the pre-built plugin binary for your platform from the [Releases](https://github.com/RickyWu18/plotjuggler-drone/releases) page of this repository.
+4. Restart PlotJuggler. The plugin will load in the new session.
 
-### 3. Drop it into the PlotJuggler plugin folder
+### PJ4 (PlotJuggler 4.x)
 
-Add a custom folder in PlogJuggler Preferences. Or Place the file in the directory where PlotJuggler looks for plugins:
-
-| Platform | Plugin path |
-|---|---|
-| Windows | Same folder as `plotjuggler.exe` (e.g. `C:\Program Files\PlotJuggler\`) |
-| Linux | Same folder as the `plotjuggler` binary (e.g. `/usr/local/bin/`) |
-
-
-Restart PlotJuggler. The **Plugin** will load in new session.
+> 🚧 Not available yet. See [pj4/README.md](pj4/README.md).
 
 ---
 
 ## Building from Source
 
-See [docs/build.md](docs/build.md) for workspace layout, PlotJuggler setup, and CMake build instructions.
+### PJ3 (PlotJuggler 3.x)
 
----
+See [pj3/docs/build.md](pj3/docs/build.md) for workspace layout, PlotJuggler setup, and CMake build instructions.
 
-## Development
+### PJ4 (PlotJuggler 4.x)
 
-See [docs/develop.md](docs/develop.md) for step-by-step instructions on scaffolding a new plugin from the template, the CMake wiring, and key rules for thread-safe `dataMap()` access.
+> 🚧 Not available yet. See [pj4/README.md](pj4/README.md).
 
 ---
 

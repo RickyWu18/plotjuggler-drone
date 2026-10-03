@@ -2,6 +2,12 @@
 
 <!-- What does this PR do and why? One or two sentences. -->
 
+## Target PlotJuggler version
+
+- [ ] PJ3 (`pj3/`)
+- [ ] PJ4 (`pj4/`)
+- [ ] Both / shared (`3rdparty/`, `docs/`, root files)
+
 ## Plugin(s) affected
 
 - [ ] DataStreamMavlink
