@@ -1,4 +1,4 @@
-name: Release PJ3 / Ubuntu
+name: Release PJ3
 
 on:
   workflow_dispatch:
@@ -94,6 +94,103 @@ jobs:
           ZIP_NAME="PlotJuggler-Drone-${SAFE_REF}-Ubuntu-x86_64.zip"
           zip -j "$ZIP_NAME" drone_build/bin/*.so
           echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ env.ZIP_NAME }}
+          fail_on_unmatched_files: true
+
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      CXXFLAGS: /MP
+      CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm_cache
+
+    steps:
+      - name: Checkout PlotJuggler-Drone
+        uses: actions/checkout@v6
+        with:
+          path: drone
+          submodules: recursive
+
+      - name: Cache PlotJuggler install
+        id: cache-pj
+        uses: actions/cache@v5
+        with:
+          path: pj_install
+          key: pj-install-windows-${{ env.PJ_TAG }}
+
+      - name: Clone PlotJuggler ${{ env.PJ_TAG }}
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch ${{ env.PJ_TAG }} `
+            https://github.com/facontidavide/PlotJuggler.git PlotJuggler
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '5.15.*'
+          arch: 'win64_msvc2019_64'
+          dir: '${{ github.workspace }}/qt_installation/'
+          cache: 'true'
+
+      - name: Cache CPM packages
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/cpm_cache
+          key: cpm-windows-pj-${{ env.PJ_TAG }}
+          restore-keys: cpm-windows-
+
+      - name: Configure PlotJuggler
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          cmake -S PlotJuggler -B pj_build `
+            -A x64 `
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/pj_install" `
+            -DPJ_INSTALLATION=windows `
+            -DPJ_PLUGINS_DIRECTORY=bin
+
+      - name: Build PlotJuggler
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: cmake --build pj_build --config Release --parallel
+
+      - name: Install PlotJuggler
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: cmake --install pj_build --config Release
+
+      - name: Configure drone plugins
+        shell: pwsh
+        run: |
+          cmake -S drone/pj3 -B drone_build `
+            -A x64 `
+            "-DPJ_INSTALL=${{ github.workspace }}/pj_install"
+
+      - name: Build drone plugins
+        shell: pwsh
+        run: cmake --build drone_build --config Release --parallel
+
+      - name: Package plugins
+        shell: pwsh
+        run: |
+          $ref = "${{ github.ref_name }}" -replace '/', '-'
+          $zipName = "PlotJuggler-Drone-$ref-Windows-x64.zip"
+          Compress-Archive -Path drone_build/bin/Release/*.dll -DestinationPath $zipName
+          "ZIP_NAME=$zipName" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
