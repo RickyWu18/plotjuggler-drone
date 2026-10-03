@@ -133,7 +133,9 @@ TEST(MavlinkDecoder, ArrayFieldsGetIndexedNamesAndCharFieldsAreSkipped) {
   EXPECT_FLOAT_EQ(std::get<float>(out[0].values[indexOf(out[0], "q.0")]), 1.0F);
 
   mavlink_message_t text;
-  mavlink_msg_statustext_pack(1, 1, &text, MAV_SEVERITY_INFO, "hello", 0, 0);
+  // The pack function copies the full fixed-size text field (50 bytes), so pass a full-size buffer.
+  char status_text[50] = "hello";
+  mavlink_msg_statustext_pack(1, 1, &text, MAV_SEVERITY_INFO, status_text, 0, 0);
   const auto text_out = parse(parser, toBytes(text));
   ASSERT_EQ(text_out.size(), 1U);
   EXPECT_EQ(indexOf(text_out[0], "text"), text_out[0].schema->size());
