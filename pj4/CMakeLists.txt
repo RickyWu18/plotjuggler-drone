@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(PJ_BUILD_TESTS "Build unit tests" ON)
+set(PJ_PLUGINS "" CACHE STRING "Semicolon-separated plugin dirs under plugins/ to build (empty = all)")
 
 find_package(plotjuggler_sdk REQUIRED COMPONENTS plugin_sdk)
 find_package(nlohmann_json REQUIRED)
@@ -35,7 +36,17 @@ endif()
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../core ${CMAKE_BINARY_DIR}/core)
 
 # One subdirectory per plugin under plugins/ (each has its own CMakeLists.txt).
-file(GLOB plugin_dirs RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/plugins ${CMAKE_CURRENT_SOURCE_DIR}/plugins/*)
+# PJ_PLUGINS restricts the build to the named plugins (build.sh <plugin>...).
+if(PJ_PLUGINS)
+  set(plugin_dirs ${PJ_PLUGINS})
+  foreach(dir ${plugin_dirs})
+    if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/plugins/${dir}/CMakeLists.txt)
+      message(FATAL_ERROR "PJ_PLUGINS: unknown plugin '${dir}' (no plugins/${dir}/CMakeLists.txt)")
+    endif()
+  endforeach()
+else()
+  file(GLOB plugin_dirs RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/plugins ${CMAKE_CURRENT_SOURCE_DIR}/plugins/*)
+endif()
 foreach(dir ${plugin_dirs})
   if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/plugins/${dir}/CMakeLists.txt)
     add_subdirectory(plugins/${dir})

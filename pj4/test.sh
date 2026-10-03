@@ -3,8 +3,9 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 found=0
-for dir in "${ROOT}/build" "${ROOT}/build/debug"; do
-  [[ -f "${dir}/CMakeCache.txt" ]] || continue
+for cache in "${ROOT}"/build/*/CMakeCache.txt "${ROOT}"/build/*/debug/CMakeCache.txt; do
+  [[ -f "${cache}" ]] || continue
+  dir="$(dirname "${cache}")"
   found=1
   cfg="$(grep -E '^CMAKE_BUILD_TYPE:' "${dir}/CMakeCache.txt" | cut -d= -f2)"
   ctest --test-dir "${dir}" -C "${cfg:-Release}" --output-on-failure

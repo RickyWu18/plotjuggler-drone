@@ -40,5 +40,5 @@ cd plotjuggler-drone/pj4
 `build.sh` provides `plotjuggler_sdk/<SDK_VERSION>` in the Conan cache (`FORCE_SDK=1` rebuilds it,
 `SDK_LOCAL_DIR=/path` overrides the checkout), then runs `conan install`, CMake and the build.
 
-The compiled `.dll` and its `.pjmanifest.json` are placed in `pj4/build/bin/`. Copy both into the plugin
+The compiled `.dll` and its `.pjmanifest.json` are placed in `pj4/build/all/bin/` (or `pj4/build/<plugin>/bin/` when built with `./build.sh <plugin>`). Copy both into the plugin
 directory scanned by the PJ4 host.
