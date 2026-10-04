@@ -1,6 +1,7 @@
 # ArduPilot BIN Log Format — Protocol Reference
 
-> Derived from `ap_log/AP_Logger/` source code for implementing a PlotJuggler data loader plugin.
+> Based on the ArduPilot DataFlash log format, as observed in the public ArduPilot source and documentation,
+> for implementing a PlotJuggler data loader plugin.
 
 ---
 
