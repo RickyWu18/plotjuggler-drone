@@ -42,7 +42,7 @@ std::string ArdupilotDialog::ui_content() const {
 }
 
 std::string ArdupilotDialog::saveConfig() const {
-  return nlohmann::json{{"filepath", filepath_}}.dump();
+  return nlohmann::json{{"filepath", filepath_}, {"show_units", show_units_}}.dump();
 }
 
 bool ArdupilotDialog::loadConfig(std::string_view config_json) {
@@ -50,6 +50,7 @@ bool ArdupilotDialog::loadConfig(std::string_view config_json) {
   if (cfg.is_discarded()) {
     return false;
   }
+  show_units_ = cfg.value("show_units", false);
   setFilePath(cfg.value("filepath", std::string{}));
   return true;
 }
@@ -89,8 +90,18 @@ std::string ArdupilotDialog::widget_data() {
   wd.setEnabled("btnExportSelected", !selected_files_.empty());
   wd.setEnabled("btnExportAll", !files_.empty());
 
+  wd.setChecked("cbShowUnits", show_units_);
+
   wd.setLabel("labelStatus", status_);
   return wd.toJson();
+}
+
+bool ArdupilotDialog::onToggled(std::string_view name, bool checked) {
+  if (name == "cbShowUnits") {
+    show_units_ = checked;
+    return true;
+  }
+  return false;
 }
 
 bool ArdupilotDialog::onTextChanged(std::string_view name, std::string_view text) {
