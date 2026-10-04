@@ -29,13 +29,13 @@ PlotJuggler is a fast, open-source time-series visualization tool. This reposito
 ### DataLoadArdupilot — Feature Highlights
 
 - **No conversion needed:** open `.BIN` files directly — no pre-processing or format conversion required.
-- **All fields, correct units:** every numeric field across all message types is automatically available as a plot series, with units and scaling applied. ~~Optionally append the unit to each series name (e.g. `Roll(deg)`) via a checkbox before loading.~~
+- **All fields, correct units:** every numeric field across all message types is automatically available as a plot series, with units and scaling applied. Optionally append the unit to each series name (e.g. `Roll(deg)`) via a checkbox before loading.
 - **Multi-instance sensor support:** sensors with multiple instances (e.g. two GPS units) are kept separate and clearly labelled.
-- ~~**Official naming compat:** an optional checkbox matches the series naming convention used by the [official ArduPilot PlotJuggler plugin](https://github.com/ArduPilot/plotjuggler-apbin-plugins), so saved layouts and scripts work without changes.~~
 - **Info dialog** with three tabs:
   - **Parameters** — all flight parameters from the log, with live search filtering and one-click export to a `.param` file.
   - **Embedded Files** — any files embedded in the log (e.g. crash dumps, config backups), exportable to a folder.
   - **Messages** — all flight messages with timestamps.
+- **Official naming compat (PJ3 only):** an optional checkbox matches the series naming convention used by the [official ArduPilot PlotJuggler plugin](https://github.com/ArduPilot/plotjuggler-apbin-plugins), so saved layouts and scripts work without changes.
 
 ---
 
@@ -58,20 +58,24 @@ PlotJuggler is a fast, open-source time-series visualization tool. This reposito
 
 ### PJ4 (PlotJuggler 4.x)
 
-#### ~~Option A - Marketplace (recommended)~~
+#### Option A - Marketplace
 
+> **Coming soon:** Marketplace installation is being prepared.
+
+<!--
 1. **Install PlotJuggler 4.x.**
 2. **Open PlotJuggler 4.x Marketplace** at `File > Extensions Marketplace`.
 3. **Find and Install the plugins**
    - **DataLoadArdupilot**: Ardupilot BIN Loader
    - **DataStreamMavlink**: MAVLink streamer
 4. **Restart PlotJuggler.** The plugins will load in the new session.
+-->
 
 #### Option B - Install Locally
 
 1. **Download the plugin** from the [Releases](https://github.com/RickyWu18/plotjuggler-drone/releases) page. Each package contains the plugin library and its manifest.
 2. **Click `Install local...`** in PlotJuggler 4.x Marketplace.
-3. **Select the .zip file which you downloaded.**
+3. **Select the downloaded .zip file.**
 4. **Restart PlotJuggler.** The plugins will load in the new session.
 
 ---
@@ -85,6 +89,13 @@ See [pj3/docs/build.md](pj3/docs/build.md) for workspace layout, PlotJuggler set
 ### PJ4 (PlotJuggler 4.x)
 
 See [pj4/docs/build.md](pj4/docs/build.md) for prerequisites, the `plotjuggler_sdk` setup, and build/package instructions.
+
+---
+
+## Contributing
+
+Bug reports and feature requests are welcome via [Issues](https://github.com/RickyWu18/plotjuggler-drone/issues).
+For development setup, see [pj3/docs/develop.md](pj3/docs/develop.md) and [pj4/docs/develop.md](pj4/docs/develop.md).
 
 ---
 

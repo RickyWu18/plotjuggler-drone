@@ -1,0 +1,59 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: pj-version
+    attributes:
+      label: PlotJuggler version
+      options:
+        - PJ3 (3.x)
+        - PJ4 (4.x)
+    validations:
+      required: true
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Plugin
+      options:
+        - DataStreamMavlink
+        - DataLoadArdupilot
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Plugin and PlotJuggler version numbers
+      description: e.g. plugin 0.1.0, PlotJuggler 3.9.2
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 / Ubuntu 22.04
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: For DataStreamMavlink, include the transport (UDP / TCP / Serial) and the vehicle or simulator. For DataLoadArdupilot, attach or link the `.BIN` log if you can.
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Any error messages, console output, or screenshots.
