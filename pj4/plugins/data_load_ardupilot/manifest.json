@@ -1,7 +1,7 @@
 {
   "id": "ardupilot-bin-loader",
   "name": "ArduPilot BIN Loader",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Data loader for Ardupilot BIN files. Flight log format for Ardupilot.",
   "category": "data_loader",
   "tags": ["file", "loader", "ardupilot", "drone", "flight"],
