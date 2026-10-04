@@ -53,7 +53,7 @@ PJ::sdk::ValueRef toValueRef(const ap::SampleValue& value) {
 /// rows appended by handle.
 class HostSink : public ap::SampleSink {
  public:
-  explicit HostSink(const PJ::sdk::SourceWriteHostView& host) : host_(host) {}
+  HostSink(const PJ::sdk::SourceWriteHostView& host, bool show_units) : host_(host), show_units_(show_units) {}
 
   size_t declareGroup(const std::string& name, const std::vector<ap::FieldSpec>& fields) override {
     Group group;
@@ -66,7 +66,7 @@ class HostSink : public ap::SampleSink {
     group.topic = *topic;
     group.handles.reserve(fields.size());
     for (const auto& field : fields) {
-      auto handle = host_.ensureField(*topic, field.name, toPrimitive(field.type));
+      auto handle = host_.ensureField(*topic, displayName(field), toPrimitive(field.type));
       if (!handle) {
         fail(handle.error());
         break;
@@ -105,6 +105,22 @@ class HostSink : public ap::SampleSink {
   }
 
  private:
+  /// "Roll" -> "Roll(deg)". '/' in a unit becomes U+2215 so "m/s" does not split the field path.
+  std::string displayName(const ap::FieldSpec& field) const {
+    if (!show_units_ || field.unit.empty()) {
+      return field.name;
+    }
+    std::string name = field.name + "(";
+    for (char ch : field.unit) {
+      if (ch == '/') {
+        name += "\xe2\x88\x95";
+      } else {
+        name += ch;
+      }
+    }
+    return name + ")";
+  }
+
   struct Group {
     PJ::sdk::TopicHandle topic{};
     std::vector<PJ::sdk::FieldHandle> handles;
@@ -118,6 +134,7 @@ class HostSink : public ap::SampleSink {
   }
 
   const PJ::sdk::SourceWriteHostView& host_;
+  bool show_units_ = false;
   std::vector<Group> groups_;
   std::vector<PJ::sdk::BoundFieldValue> row_;
   std::string error_;
@@ -134,7 +151,7 @@ class ArdupilotSource : public PJ::FileSourceBase {
   }
 
   std::string saveConfig() const override {
-    return nlohmann::json{{"filepath", filepath_}}.dump();
+    return nlohmann::json{{"filepath", filepath_}, {"show_units", dialog_.showUnits()}}.dump();
   }
 
   PJ::Status loadConfig(std::string_view config_json) override {
@@ -143,8 +160,9 @@ class ArdupilotSource : public PJ::FileSourceBase {
       return PJ::unexpected(std::string("invalid config JSON"));
     }
     filepath_ = cfg.value("filepath", std::string{});
-    if (!filepath_.empty()) {
-      dialog_.setFilePath(filepath_);
+    // The dialog owns the show-units option and rescans the file for its info tabs.
+    if (!dialog_.loadConfig(config_json)) {
+      return PJ::unexpected(std::string("invalid config JSON"));
     }
     return PJ::okStatus();
   }
@@ -175,7 +193,7 @@ class ArdupilotSource : public PJ::FileSourceBase {
       return !runtimeHost().isStopRequested();
     };
 
-    HostSink sink(writeHost());
+    HostSink sink(writeHost(), dialog_.showUnits());
     ap::Parser parser(file.data(), file.size(), std::move(options), &sink);
 
     if (parser.result() == ap::Parser::Result::kSinkError) {

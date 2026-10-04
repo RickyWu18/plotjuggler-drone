@@ -19,6 +19,11 @@ class ArdupilotDialog : public PJ::DialogPluginTyped {
  public:
   void setFilePath(const std::string& filepath);
 
+  /// Append the field's unit to its name, e.g. "Roll(deg)".
+  bool showUnits() const {
+    return show_units_;
+  }
+
   // --- Dialog protocol ---
   std::string manifest() const override;
   std::string ui_content() const override;
@@ -28,6 +33,7 @@ class ArdupilotDialog : public PJ::DialogPluginTyped {
   void onAccepted(std::string_view /*json*/) override {}
   void onRejected() override {}
 
+  bool onToggled(std::string_view name, bool checked) override;
   bool onTextChanged(std::string_view name, std::string_view text) override;
   bool onSelectionChanged(std::string_view name, const std::vector<std::string>& selected) override;
   bool onFileSelected(std::string_view name, std::string_view path) override;
@@ -40,6 +46,7 @@ class ArdupilotDialog : public PJ::DialogPluginTyped {
   std::string filepath_;
   std::string scanned_path_;
   std::string status_;
+  bool show_units_ = false;
 
   std::vector<pj_drone::ardupilot::Parameter> params_;
   std::vector<pj_drone::ardupilot::EmbeddedFile> files_;
