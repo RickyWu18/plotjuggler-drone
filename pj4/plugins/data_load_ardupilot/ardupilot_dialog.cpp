@@ -5,6 +5,7 @@
 #include "ardupilot_dialog.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <nlohmann/json.hpp>
 #include <pj_plugins/sdk/widget_data.hpp>
@@ -125,11 +126,20 @@ bool ArdupilotDialog::onFileSelected(std::string_view name, std::string_view pat
   if (name != "btnExport") {
     return false;
   }
+  // The save picker does not append the filter's extension, so add ".param" when missing.
+  std::string out_path(path);
+  auto fs_path = pathFromUtf8(out_path);
+  std::string ext = fs_path.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+  if (ext != ".param") {
+    out_path += ".param";
+    fs_path = pathFromUtf8(out_path);
+  }
   // Only the rows currently shown (search filter applied) are exported.
-  if (ap::writeTextFile(pathFromUtf8(path), ap::buildParamFileText(visible_params_))) {
-    status_ = "Exported " + std::to_string(visible_params_.size()) + " parameter(s) to:\n" + std::string(path);
+  if (ap::writeTextFile(fs_path, ap::buildParamFileText(visible_params_))) {
+    status_ = "Exported " + std::to_string(visible_params_.size()) + " parameter(s) to:\n" + out_path;
   } else {
-    status_ = "Export Failed: could not open file for writing:\n" + std::string(path);
+    status_ = "Export Failed: could not open file for writing:\n" + out_path;
   }
   return true;
 }
