@@ -54,6 +54,5 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # ── Plugins ────────────────────────────────────────────────────────────────
-# add_subdirectory(PluginTemplate)
 add_subdirectory(DataStreamMavlink)
 add_subdirectory(DataLoadArdupilot)

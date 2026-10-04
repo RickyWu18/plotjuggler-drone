@@ -4,7 +4,7 @@
 
 1. Create a new subdirectory, e.g. `DataStreamDrone/`.
 
-2. Add `DataStreamDrone/CMakeLists.txt`, modelled after `PluginTemplate/CMakeLists.txt`:
+2. Add `DataStreamDrone/CMakeLists.txt`:
 
 ```cmake
 add_library(DataStreamDrone SHARED

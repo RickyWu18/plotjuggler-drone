@@ -2,7 +2,7 @@
 
 > An unofficial collection of [PlotJuggler](https://github.com/facontidavide/PlotJuggler) plugins for drone telemetry visualization and live data streaming.
 
-[![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](LICENSE)
 
 ---
 
@@ -101,4 +101,4 @@ For development setup, see [pj3/docs/develop.md](pj3/docs/develop.md) and [pj4/d
 
 ## License
 
-This project is licensed under the [Mozilla Public License 2.0](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
