@@ -1,5 +1,5 @@
 {
-  "id": "drone-mavlink-streamer",
+  "id": "mavlink-streamer",
   "name": "MAVLink Streamer",
   "version": "0.1.0",
   "description": "Streams live MAVLink telemetry over UDP, TCP or a serial port; every numeric field becomes a series.",
