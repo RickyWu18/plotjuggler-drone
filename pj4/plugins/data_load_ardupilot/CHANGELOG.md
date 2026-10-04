@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.1] - 2026-10-04
+
+### Added
+- "Append units to series names" option in the loader dialog (e.g. `Roll` -> `Roll(deg)`); `/` in a unit is shown as
+  U+2215 (`∕`) so `m/s` does not split the field path. The setting is saved in the plugin config (`show_units`).
+
+### Fixed
+- Exporting parameters now appends `.param` when the chosen file name has no such extension.
+
 ## [0.1.0] - 2026-10-03
 
 ### Added
