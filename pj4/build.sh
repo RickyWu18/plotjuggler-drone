@@ -52,4 +52,6 @@ fi
 cmake -S "${ROOT}" -B "${BUILD_DIR}" "${GEN_ARGS[@]}" \
   -DCMAKE_TOOLCHAIN_FILE="${BUILD_DIR}/conan_toolchain.cmake" \
   -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -DPJ_PLUGINS="${PJ_PLUGINS}" "${CCACHE_ARGS[@]}"
-cmake --build "${BUILD_DIR}" --config "${BUILD_TYPE}" -j "$(nproc)"
+# nproc is GNU coreutils (absent on macOS); fall back to sysctl, then to 4.
+JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+cmake --build "${BUILD_DIR}" --config "${BUILD_TYPE}" -j "${JOBS}"
