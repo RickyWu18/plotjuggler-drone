@@ -37,7 +37,7 @@ jobs:
             arch: aarch64
             os_label: linux
           # Apple silicon only; Intel Macs are not a supported target (same as pj-official-plugins).
-          - runner: macos-14
+          - runner: macos-15
             arch: arm64
             os_label: macos
           # Pinned to windows-2022: the VS18/MSVC 14.5x image breaks some Conan dependency builds
