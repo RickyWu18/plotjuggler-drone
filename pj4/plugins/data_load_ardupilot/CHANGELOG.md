@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-08
+
+### Added
+- macOS arm64 (Apple silicon) release build, alongside Linux x86_64 / arm64 and Windows x86_64.
+
 ### Fixed
 - With "Append units to series names", a `.` in a unit (`W.h`, `W.s`, `A.s`) is dropped (`Wh`, `Ws`, `As`) so it no
   longer splits the series path into extra tree levels.
