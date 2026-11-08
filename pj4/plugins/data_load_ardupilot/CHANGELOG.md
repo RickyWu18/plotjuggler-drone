@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- With "Append units to series names", a `.` in a unit (`W.h`, `W.s`, `A.s`) is dropped (`Wh`, `Ws`, `As`) so it no
+  longer splits the series path into extra tree levels.
+
 ## [0.1.1] - 2026-10-04
 
 ### Added

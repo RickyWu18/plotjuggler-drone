@@ -103,7 +103,8 @@ class HostSink : public ap::SampleSink {
   }
 
  private:
-  /// "Roll" -> "Roll(deg)". '/' in a unit becomes U+2215 so "m/s" does not split the field path.
+  /// "Roll" -> "Roll(deg)". PJ4 splits series paths on '/' and '.', so in a unit '/' becomes U+2215 ("m/s") and
+  /// '.' is dropped ("W.h" -> "Wh").
   std::string displayName(const ap::FieldSpec& field) const {
     if (!show_units_ || field.unit.empty()) {
       return field.name;
@@ -112,7 +113,7 @@ class HostSink : public ap::SampleSink {
     for (char ch : field.unit) {
       if (ch == '/') {
         name += "\xe2\x88\x95";
-      } else {
+      } else if (ch != '.') {
         name += ch;
       }
     }
