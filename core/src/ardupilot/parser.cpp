@@ -181,18 +181,18 @@ bool Parser::parseSinglePass() {
 
       applyPendingFmtu(mtype);
     } else {
-      if (!fmt_valid_[msgid]) {
-        break;
+      // Corrupt region (unknown id or impossible length): resync on the next header, one byte after this
+      // header's first byte, instead of dropping the rest of the log.
+      if (!fmt_valid_[msgid] || fmt_table_[msgid].msg_len < 3) {
+        pos -= 2;
+        continue;
       }
 
       MessageDef& def = fmt_table_[msgid];
-      if (def.msg_len < 3) {
-        break;
-      }
-
       const size_t payload_len = static_cast<size_t>(def.msg_len) - 3;
       if (pos + payload_len > length_) {
-        break;
+        pos -= 2;
+        continue;
       }
 
       const uint8_t* payload = data_ + pos;
