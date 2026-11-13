@@ -102,19 +102,31 @@ std::string ArdupilotDialog::widget_data() {
   wd.setFolderPicker("btnExportSelected", "Export Selected...", "Select Export Folder");
   wd.setFolderPicker("btnExportAll", "Export All...", "Select Export Folder");
   const bool deciding = !pending_names_.empty();
-  wd.setEnabled("btnExportSelected", !selected_files_.empty() && !deciding);
-  wd.setEnabled("btnExportAll", !files_.empty() && !deciding);
+  bool any_exportable = false;
+  bool selected_exportable = false;
+  for (const auto& f : files_) {
+    if (ap::checkEmbeddedFile(f).status == ap::FileStatus::kCannotExport) {
+      continue;
+    }
+    any_exportable = true;
+    if (std::find(selected_files_.begin(), selected_files_.end(), f.name) != selected_files_.end()) {
+      selected_exportable = true;
+    }
+  }
+  wd.setEnabled("btnExportSelected", selected_exportable && !deciding);
+  wd.setEnabled("btnExportAll", any_exportable && !deciding);
 
   wd.setVisible("groupConflict", deciding);
   if (deciding) {
-    std::string text = std::to_string(pending_conflicts_.size()) + " file(s) already exist in:\n" + pending_dir_ + "\n";
+    std::string text;
     constexpr size_t kShown = 8;
     for (size_t i = 0; i < pending_conflicts_.size() && i < kShown; i++) {
-      text += "\n" + pending_conflicts_[i];
+      text += (text.empty() ? "" : "\n") + pending_conflicts_[i];
     }
     if (pending_conflicts_.size() > kShown) {
       text += "\n... and " + std::to_string(pending_conflicts_.size() - kShown) + " more";
     }
+    text += "\n\n" + std::to_string(pending_conflicts_.size()) + " file(s) already exist in:\n" + pending_dir_;
     wd.setLabel("labelConflict", text);
   }
 
@@ -187,6 +199,13 @@ bool ArdupilotDialog::onFolderSelected(std::string_view name, std::string_view p
       to_export.push_back(&file);
     }
   } else {
+    return false;
+  }
+  // Files flagged "Cannot export" are already explained in the table; skip them instead of re-reporting.
+  std::erase_if(to_export, [](const ap::EmbeddedFile* f) {
+    return ap::checkEmbeddedFile(*f).status == ap::FileStatus::kCannotExport;
+  });
+  if (to_export.empty()) {
     return false;
   }
 
