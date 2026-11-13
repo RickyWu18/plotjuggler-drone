@@ -57,18 +57,18 @@ struct FileChunk {
 struct EmbeddedFile {
   std::string name;
   std::vector<FileChunk> chunks;  // log order
-  size_t estimated_size = 0;      // max(offset + declared Length) over the chunks
-  size_t size = 0;                // end of the assembled content (what streamEmbeddedFile() produces)
-  size_t covered_bytes = 0;       // bytes backed by chunk data (size - gap_bytes)
-  size_t gap_bytes = 0;           // bytes inside `size` that no chunk provides; a file with gaps is not exportable
-  size_t overlap_bytes = 0;       // bytes provided by more than one chunk (the later chunk wins)
+  uint64_t estimated_size = 0;      // max(offset + declared Length) over the chunks
+  uint64_t size = 0;                // end of the assembled content (what streamEmbeddedFile() produces)
+  uint64_t covered_bytes = 0;       // bytes backed by chunk data (size - gap_bytes)
+  uint64_t gap_bytes = 0;           // bytes inside `size` that no chunk provides; a file with gaps is not exportable
+  uint64_t overlap_bytes = 0;       // bytes provided by more than one chunk (the later chunk wins)
   std::string sha256;             // hex digest of the assembled content, taken at scan time
 };
 
 /// A run of the assembled content: either bytes copied from the log or a zero-filled gap.
 struct FileSegment {
-  size_t file_offset = 0;
-  size_t length = 0;
+  uint64_t file_offset = 0;
+  uint64_t length = 0;
   size_t log_pos = 0;  // unused for gaps
   bool is_gap = false;
 };

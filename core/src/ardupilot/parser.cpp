@@ -18,7 +18,8 @@ constexpr uint8_t kHeadByte2 = 0x95;
 constexpr uint8_t kFmtMsgId = 128;
 constexpr size_t kFmtPayloadLen = 86;
 
-// A corrupt FILE chunk offset must not make us allocate gigabytes.
+// Files whose assembled extent is larger than this are not indexed. Nothing is allocated for them any more;
+// the limit only keeps absurd offsets out of the file list.
 constexpr size_t kMaxEmbeddedFileSize = size_t{256} * 1024 * 1024;
 
 template <typename T>
@@ -676,20 +677,21 @@ void Parser::parseFilePacket(const uint8_t* payload, const MessageDef& def) {
 }
 
 std::vector<FileSegment> layoutEmbeddedFile(EmbeddedFile& file) {
+  // Offsets and sizes are 64-bit so offset + length cannot wrap on 32-bit targets.
   struct Run {
-    size_t end;
+    uint64_t end;
     size_t log_pos;  // log position of the byte at the run's start
   };
   // Disjoint runs keyed by start offset. Chunks are applied in log order, so a later chunk replaces what an
   // earlier one provided for the same bytes.
-  std::map<size_t, Run> runs;
+  std::map<uint64_t, Run> runs;
   file.overlap_bytes = 0;
   file.estimated_size = 0;
 
   for (const FileChunk& c : file.chunks) {
-    const size_t start = c.offset;
-    const size_t end = start + c.length;
-    file.estimated_size = std::max(file.estimated_size, start + c.declared_length);
+    const uint64_t start = c.offset;
+    const uint64_t end = start + c.length;
+    file.estimated_size = std::max<uint64_t>(file.estimated_size, start + c.declared_length);
 
     auto it = runs.lower_bound(start);
     if (it != runs.begin()) {
@@ -699,7 +701,7 @@ std::vector<FileSegment> layoutEmbeddedFile(EmbeddedFile& file) {
       }
     }
     while (it != runs.end() && it->first < end) {
-      const size_t run_start = it->first;
+      const uint64_t run_start = it->first;
       const Run run = it->second;
       it = runs.erase(it);
       file.overlap_bytes += std::min(run.end, end) - std::max(run_start, start);
@@ -707,7 +709,7 @@ std::vector<FileSegment> layoutEmbeddedFile(EmbeddedFile& file) {
         runs.emplace(run_start, Run{start, run.log_pos});
       }
       if (run.end > end) {
-        it = runs.emplace(end, Run{run.end, run.log_pos + (end - run_start)}).first;
+        it = runs.emplace(end, Run{run.end, run.log_pos + static_cast<size_t>(end - run_start)}).first;
         ++it;
       }
     }
@@ -715,7 +717,7 @@ std::vector<FileSegment> layoutEmbeddedFile(EmbeddedFile& file) {
   }
 
   std::vector<FileSegment> segments;
-  size_t cursor = 0;
+  uint64_t cursor = 0;
   file.covered_bytes = 0;
   file.gap_bytes = 0;
   for (const auto& [start, run] : runs) {
@@ -737,7 +739,7 @@ bool streamEmbeddedFile(const EmbeddedFile& file, const uint8_t* log, size_t log
   for (const FileSegment& seg : layoutEmbeddedFile(layout_copy)) {
     // A gap is never filled in: the output would contain bytes the log does not have.
     if (seg.is_gap || seg.log_pos > log_length || seg.length > log_length - seg.log_pos ||
-        !write(log + seg.log_pos, seg.length)) {
+        !write(log + seg.log_pos, static_cast<size_t>(seg.length))) {
       return false;
     }
   }
