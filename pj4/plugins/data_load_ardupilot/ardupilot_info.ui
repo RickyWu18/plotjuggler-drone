@@ -143,6 +143,16 @@
            <string>Size</string>
           </property>
          </column>
+         <column>
+          <property name="text">
+           <string>Data</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Status</string>
+          </property>
+         </column>
         </widget>
        </item>
        <item>
@@ -181,6 +191,66 @@
           </widget>
          </item>
         </layout>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupConflict">
+         <property name="visible">
+          <bool>false</bool>
+         </property>
+         <property name="title">
+          <string>Files already exist in the export folder</string>
+         </property>
+         <layout class="QVBoxLayout" name="conflictLayout">
+          <item>
+           <widget class="QLabel" name="labelConflict">
+            <property name="text">
+             <string/>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="conflictButtonsLayout">
+            <item>
+             <spacer name="conflictSpacer">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnConflictOverwrite">
+              <property name="text">
+               <string>Overwrite</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnConflictSkip">
+              <property name="text">
+               <string>Skip existing</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnConflictCancel">
+              <property name="text">
+               <string>Cancel export</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
        </item>
       </layout>
      </widget>

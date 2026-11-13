@@ -4,6 +4,10 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iterator>
+#include <map>
+
+#include "pj_drone_core/util/sha256.hpp"
 
 namespace pj_drone::ardupilot {
 
@@ -58,7 +62,7 @@ void Parser::parse() {
     return;
   }
   if (options_.load_files) {
-    assembleEmbeddedFiles();
+    indexEmbeddedFiles();
   }
 }
 
@@ -659,32 +663,132 @@ void Parser::parseFilePacket(const uint8_t* payload, const MessageDef& def) {
     return;
   }
   const size_t chunk_len = std::min({static_cast<size_t>(length), size_t{64}, data_size});
+  if (chunk_len == 0) {
+    return;
+  }
 
-  file_chunks_[filename].emplace_back(offset, std::vector<uint8_t>(data_ptr, data_ptr + chunk_len));
+  FileChunk chunk;
+  chunk.offset = offset;
+  chunk.declared_length = length;
+  chunk.length = static_cast<uint8_t>(chunk_len);
+  chunk.log_pos = static_cast<size_t>(data_ptr - data_);
+  file_chunks_[filename].push_back(chunk);
 }
 
-void Parser::assembleEmbeddedFiles() {
-  for (auto& [name, chunks] : file_chunks_) {
-    std::sort(chunks.begin(), chunks.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+std::vector<FileSegment> layoutEmbeddedFile(EmbeddedFile& file) {
+  struct Run {
+    size_t end;
+    size_t log_pos;  // log position of the byte at the run's start
+  };
+  // Disjoint runs keyed by start offset. Chunks are applied in log order, so a later chunk replaces what an
+  // earlier one provided for the same bytes.
+  std::map<size_t, Run> runs;
+  file.overlap_bytes = 0;
+  file.estimated_size = 0;
 
-    size_t total = 0;
-    for (const auto& [chunk_offset, chunk_data] : chunks) {
-      const size_t end = chunk_offset + chunk_data.size();
-      total = std::max(total, end);
+  for (const FileChunk& c : file.chunks) {
+    const size_t start = c.offset;
+    const size_t end = start + c.length;
+    file.estimated_size = std::max(file.estimated_size, start + c.declared_length);
+
+    auto it = runs.lower_bound(start);
+    if (it != runs.begin()) {
+      auto prev = std::prev(it);
+      if (prev->second.end > start) {
+        it = prev;
+      }
     }
-    if (total > kMaxEmbeddedFileSize) {
+    while (it != runs.end() && it->first < end) {
+      const size_t run_start = it->first;
+      const Run run = it->second;
+      it = runs.erase(it);
+      file.overlap_bytes += std::min(run.end, end) - std::max(run_start, start);
+      if (run_start < start) {
+        runs.emplace(run_start, Run{start, run.log_pos});
+      }
+      if (run.end > end) {
+        it = runs.emplace(end, Run{run.end, run.log_pos + (end - run_start)}).first;
+        ++it;
+      }
+    }
+    runs[start] = Run{end, c.log_pos};
+  }
+
+  std::vector<FileSegment> segments;
+  size_t cursor = 0;
+  file.covered_bytes = 0;
+  file.gap_bytes = 0;
+  for (const auto& [start, run] : runs) {
+    if (start > cursor) {
+      segments.push_back({cursor, start - cursor, 0, true});
+      file.gap_bytes += start - cursor;
+    }
+    segments.push_back({start, run.end - start, run.log_pos, false});
+    file.covered_bytes += run.end - start;
+    cursor = run.end;
+  }
+  file.size = cursor;
+  return segments;
+}
+
+bool streamEmbeddedFile(const EmbeddedFile& file, const uint8_t* log, size_t log_length,
+                        const std::function<bool(const uint8_t*, size_t)>& write) {
+  EmbeddedFile layout_copy = file;
+  for (const FileSegment& seg : layoutEmbeddedFile(layout_copy)) {
+    // A gap is never filled in: the output would contain bytes the log does not have.
+    if (seg.is_gap || seg.log_pos > log_length || seg.length > log_length - seg.log_pos ||
+        !write(log + seg.log_pos, seg.length)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::string embeddedFileDigest(const EmbeddedFile& file, const uint8_t* log, size_t log_length) {
+  util::Sha256 hasher;
+  const auto put_u64 = [&hasher](uint64_t v) {
+    uint8_t bytes[8];
+    for (size_t i = 0; i < 8; i++) {
+      bytes[i] = static_cast<uint8_t>(v >> (8 * i));
+    }
+    hasher.update(bytes, sizeof(bytes));
+  };
+
+  put_u64(file.name.size());
+  hasher.update(reinterpret_cast<const uint8_t*>(file.name.data()), file.name.size());
+  put_u64(file.chunks.size());
+  for (const FileChunk& c : file.chunks) {
+    if (c.log_pos > log_length || c.length > log_length - c.log_pos) {
+      return {};
+    }
+    const uint8_t fixed[6] = {static_cast<uint8_t>(c.offset),       static_cast<uint8_t>(c.offset >> 8),
+                              static_cast<uint8_t>(c.offset >> 16), static_cast<uint8_t>(c.offset >> 24),
+                              c.declared_length,                    c.length};
+    hasher.update(fixed, sizeof(fixed));
+    hasher.update(log + c.log_pos, c.length);
+  }
+  return hasher.hexDigest();
+}
+
+void Parser::indexEmbeddedFiles() {
+  for (auto& [name, chunks] : file_chunks_) {
+    EmbeddedFile ef;
+    ef.name = name;
+    ef.chunks = std::move(chunks);
+    layoutEmbeddedFile(ef);
+    if (ef.size > kMaxEmbeddedFileSize) {
       continue;
     }
 
-    EmbeddedFile ef;
-    ef.name = name;
-    ef.data.resize(total, 0);
-    for (const auto& [chunk_offset, chunk_data] : chunks) {
-      std::copy(chunk_data.begin(), chunk_data.end(), ef.data.begin() + static_cast<std::ptrdiff_t>(chunk_offset));
+    ef.sha256 = embeddedFileDigest(ef, data_, length_);
+    if (ef.sha256.empty()) {
+      continue;
     }
-
     embedded_files_.push_back(std::move(ef));
   }
+  file_chunks_.clear();
+  std::sort(embedded_files_.begin(), embedded_files_.end(),
+            [](const EmbeddedFile& a, const EmbeddedFile& b) { return a.name < b.name; });
 }
 
 }  // namespace pj_drone::ardupilot

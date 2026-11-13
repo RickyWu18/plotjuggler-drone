@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "pj_drone_core/ardupilot/log_tools.hpp"
 #include "pj_drone_core/ardupilot/parser.hpp"
 
 namespace ardupilot_detail {
@@ -36,8 +37,11 @@ class ArdupilotDialog : public PJ::DialogPluginTyped {
   bool onSelectionChanged(std::string_view name, const std::vector<std::string>& selected) override;
   bool onFileSelected(std::string_view name, std::string_view path) override;
   bool onFolderSelected(std::string_view name, std::string_view path) override;
+  bool onClicked(std::string_view name) override;
 
  private:
+  void runPendingExport(pj_drone::ardupilot::OverwritePolicy policy);
+  void clearPendingExport();
   void scanFile();
   void refilterParameters();
 
@@ -53,6 +57,11 @@ class ArdupilotDialog : public PJ::DialogPluginTyped {
   std::string filter_text_;
   std::vector<pj_drone::ardupilot::Parameter> visible_params_;  // filtered + sorted by name
   std::vector<std::string> selected_files_;
+
+  // An export waiting for the user to decide what to do about files that already exist in the target folder.
+  std::vector<std::string> pending_names_;
+  std::vector<std::string> pending_conflicts_;
+  std::string pending_dir_;
 };
 
 }  // namespace ardupilot_detail

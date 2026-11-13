@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Changed
+- Embedded files are no longer assembled in memory while the log is scanned; the content is built only when you
+  export, streamed straight to disk.
+- The size shown for an embedded file is the size actually assembled from its FILE chunks. The size implied by the
+  FILE offsets is only used to warn when the two differ (also for overlapping chunks; where chunks overlap, the later
+  one in the log wins). The list also shows how many of those bytes are really present in the log ("Data").
+- A file with chunks missing in the middle is flagged and not exported, instead of being padded with zeros.
+- Export re-reads the log and checks a SHA-256 over the file's FILE records taken at scan time; a log that changed in
+  between is refused.
+
+### Security
+- Embedded file names are validated before export (absolute / drive-relative paths, `..`, reserved or invalid
+  characters, Windows device names, symbolic links leaving the chosen folder); unsafe names are reported, not written.
+
+### Added
+- When the export folder already contains a file with the same name, the dialog asks whether to overwrite or skip
+  the existing files.
+
 ## [1.0.0] - 2026-11-08
 
 ### Added
