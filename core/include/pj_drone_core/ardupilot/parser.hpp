@@ -174,10 +174,11 @@ class Parser {
   std::array<FmtuPending, 256> pending_fmtu_;
   bool pending_fmtu_valid_[256] = {};
 
-  uint8_t unit_msg_type_ = 0;
-  uint8_t mult_msg_type_ = 0;
-  uint8_t fmtu_msg_type_ = 0;
-  uint8_t file_msg_type_ = 0;
+  // -1 = not defined yet. Must be out of the uint8_t range: message id 0 is a real vehicle message.
+  int unit_msg_type_ = -1;
+  int mult_msg_type_ = -1;
+  int fmtu_msg_type_ = -1;
+  int file_msg_type_ = -1;
 
   uint64_t last_timestamp_us_ = 0;
 

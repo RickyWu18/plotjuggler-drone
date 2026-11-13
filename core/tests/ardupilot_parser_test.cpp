@@ -310,3 +310,17 @@ TEST(ArdupilotParser, GarbageIsSkippedUntilNextHeader) {
   Parser parser(log.data(), log.size(), {}, &sink);
   EXPECT_EQ(sink.rows.size(), 1U);
 }
+
+TEST(ArdupilotParser, MessageIdZeroIsDecodedWithoutUnitMultFmtuFileDefinitions) {
+  std::vector<uint8_t> log;
+  fmt(log, 0, 19, "CTUN", "Qff", "TimeUS,A,B");
+  header(log, 0);
+  put<uint64_t>(log, 7);
+  put(log, 1.0F);
+  put(log, 2.0F);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+  ASSERT_EQ(sink.rows.size(), 1U);
+  EXPECT_EQ(sink.groups[sink.rows[0].group].name, "CTUN");
+}

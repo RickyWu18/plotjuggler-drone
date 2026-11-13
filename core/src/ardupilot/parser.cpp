@@ -201,13 +201,14 @@ bool Parser::parseSinglePass() {
       // A definition whose fields do not fit its own declared length is corrupt: decoding it would read
       // past the packet.
       if (def.payload_size <= payload_len) {
-        if (msgid == unit_msg_type_) {
+        const int id = msgid;
+        if (id == unit_msg_type_) {
           parseUnitPacket(payload, def);
-        } else if (msgid == mult_msg_type_) {
+        } else if (id == mult_msg_type_) {
           parseMultPacket(payload, def);
-        } else if (msgid == fmtu_msg_type_) {
+        } else if (id == fmtu_msg_type_) {
           parseFmtuPacket(payload, def);
-        } else if (msgid == file_msg_type_) {
+        } else if (id == file_msg_type_) {
           if (options_.load_files) {
             parseFilePacket(payload, def);
           }
