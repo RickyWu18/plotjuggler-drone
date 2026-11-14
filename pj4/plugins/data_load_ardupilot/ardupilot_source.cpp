@@ -54,24 +54,20 @@ class HostSink : public ap::SampleSink {
   HostSink(const PJ::sdk::SourceWriteHostView& host, bool show_units) : host_(host), show_units_(show_units) {}
 
   size_t declareGroup(const std::string& name, const std::vector<ap::FieldSpec>& fields) override {
+    // A topic or field the host rejects only drops that group or column; the rest of the log still imports.
     Group group;
+    group.field_count = fields.size();
     auto topic = host_.ensureTopic(name);
-    if (!topic) {
-      fail(topic.error());
-      groups_.push_back(std::move(group));
-      return groups_.size() - 1;
-    }
-    group.topic = *topic;
-    group.handles.reserve(fields.size());
-    for (const auto& field : fields) {
-      auto handle = host_.ensureField(*topic, displayName(field), toPrimitive(field.type));
-      if (!handle) {
-        fail(handle.error());
-        break;
+    if (topic) {
+      group.topic = *topic;
+      for (size_t i = 0; i < fields.size(); ++i) {
+        auto handle = host_.ensureField(*topic, displayName(fields[i]), toPrimitive(fields[i].type));
+        if (handle) {
+          group.columns.push_back(i);
+          group.handles.push_back(*handle);
+        }
       }
-      group.handles.push_back(*handle);
     }
-    group.valid = error_.empty();
     groups_.push_back(std::move(group));
     return groups_.size() - 1;
   }
@@ -81,13 +77,16 @@ class HostSink : public ap::SampleSink {
       return false;
     }
     const Group& group = groups_[group_id];
-    if (!group.valid || group.handles.size() != count) {
+    if (group.field_count != count) {
       fail("internal error: group/field mismatch");
       return false;
     }
+    if (group.handles.empty()) {
+      return true;  // nothing of this group could be registered
+    }
     row_.clear();
-    for (size_t i = 0; i < count; ++i) {
-      row_.push_back({.field = group.handles[i], .value = toValueRef(values[i])});
+    for (size_t i = 0; i < group.handles.size(); ++i) {
+      row_.push_back({.field = group.handles[i], .value = toValueRef(values[group.columns[i]])});
     }
     auto status = host_.appendBoundRecord(
         group.topic, PJ::Timestamp{timestamp_ns}, PJ::Span<const PJ::sdk::BoundFieldValue>(row_.data(), row_.size()));
@@ -122,8 +121,9 @@ class HostSink : public ap::SampleSink {
 
   struct Group {
     PJ::sdk::TopicHandle topic{};
-    std::vector<PJ::sdk::FieldHandle> handles;
-    bool valid = false;
+    std::vector<PJ::sdk::FieldHandle> handles;  // only the columns the host accepted
+    std::vector<size_t> columns;                // handles[i] is fed from values[columns[i]]
+    size_t field_count = 0;                     // columns the parser declared
   };
 
   void fail(std::string message) {
