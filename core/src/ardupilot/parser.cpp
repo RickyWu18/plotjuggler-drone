@@ -676,6 +676,23 @@ void Parser::parseFilePacket(const uint8_t* payload, const MessageDef& def) {
   file_chunks_[filename].push_back(chunk);
 }
 
+std::string sanitizeFileName(std::string_view raw) {
+  static constexpr char kHex[] = "0123456789ABCDEF";
+  std::string out;
+  out.reserve(raw.size());
+  for (const char ch : raw) {
+    const auto u = static_cast<unsigned char>(ch);
+    if (u >= 0x20 && u <= 0x7E && u != '%') {
+      out += ch;
+    } else {
+      out += '%';
+      out += kHex[u >> 4];
+      out += kHex[u & 0x0F];
+    }
+  }
+  return out;
+}
+
 std::vector<FileSegment> layoutEmbeddedFile(EmbeddedFile& file) {
   // Offsets and sizes are 64-bit so offset + length cannot wrap on 32-bit targets.
   struct Run {
@@ -756,8 +773,8 @@ std::string embeddedFileDigest(const EmbeddedFile& file, const uint8_t* log, siz
     hasher.update(bytes, sizeof(bytes));
   };
 
-  put_u64(file.name.size());
-  hasher.update(reinterpret_cast<const uint8_t*>(file.name.data()), file.name.size());
+  put_u64(file.raw_name.size());
+  hasher.update(reinterpret_cast<const uint8_t*>(file.raw_name.data()), file.raw_name.size());
   put_u64(file.chunks.size());
   for (const FileChunk& c : file.chunks) {
     if (c.log_pos > log_length || c.length > log_length - c.log_pos) {
@@ -775,7 +792,8 @@ std::string embeddedFileDigest(const EmbeddedFile& file, const uint8_t* log, siz
 void Parser::indexEmbeddedFiles() {
   for (auto& [name, chunks] : file_chunks_) {
     EmbeddedFile ef;
-    ef.name = name;
+    ef.raw_name = name;
+    ef.name = sanitizeFileName(name);
     ef.chunks = std::move(chunks);
     layoutEmbeddedFile(ef);
     if (ef.size > kMaxEmbeddedFileSize) {

@@ -85,6 +85,7 @@ struct ExportResult {
 /// Re-reads the log at `log_path` and writes each of `files` (as listed by the earlier scan) below `dir`, keeping
 /// its relative path. The content is assembled while streaming to a temporary ".part" file and is only moved into
 /// place when its SHA-256 equals the digest recorded at scan time, so a log that changed in between is refused.
+/// Files whose target paths coincide are all reported as failed instead of overwriting each other.
 ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const std::vector<const EmbeddedFile*>& files,
                                  const std::filesystem::path& dir, OverwritePolicy policy);
 

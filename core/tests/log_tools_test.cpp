@@ -234,3 +234,56 @@ TEST_F(ExportFixture, SizeMismatchIsReportedAsWarning) {
   files[0].estimated_size = 10;  // as if the FILE offsets promised more than the chunks delivered
   EXPECT_EQ(embeddedFileWarnings(files[0]).size(), 1U);
 }
+
+TEST(LogTools, SanitizeFileNameEscapesNonPrintableBytesAndPercent) {
+  EXPECT_EQ(sanitizeFileName("@SYS/crash.bin"), "@SYS/crash.bin");
+  EXPECT_EQ(sanitizeFileName(std::string("a\xFF" "b", 3)), "a%FFb");
+  EXPECT_EQ(sanitizeFileName("100%"), "100%25");
+  EXPECT_EQ(sanitizeFileName("tab\there\x7F"), "tab%09here%7F");
+  // '%' is escaped too, so an escape sequence in the log cannot be confused with a sanitized byte.
+  EXPECT_NE(sanitizeFileName("a%FF"), sanitizeFileName("a\xFF"));
+}
+
+TEST_F(ExportFixture, ScannedNamesAreSanitizedAndExportedUnderTheSanitizedName) {
+  const auto files = scan({{"bad\xFF.bin", "x"}, {"50%.bin", "y"}});
+  ASSERT_EQ(files.size(), 2U);
+  EXPECT_EQ(files[0].name, "50%25.bin");
+  EXPECT_EQ(files[0].raw_name, "50%.bin");
+  EXPECT_EQ(files[1].name, "bad%FF.bin");
+  EXPECT_EQ(files[1].raw_name, "bad\xFF.bin");
+  // Displayed names are pure printable ASCII, so they can always be serialized as JSON / UTF-8.
+  for (const auto& f : files) {
+    for (const char ch : f.name) {
+      EXPECT_TRUE(ch >= 0x20 && ch <= 0x7E);
+    }
+  }
+
+  const auto result = exportEmbeddedFiles(log_path, {&files[0], &files[1]}, root / "out", OverwritePolicy::kOverwrite);
+  EXPECT_EQ(result.exported, 2U);
+  EXPECT_TRUE(result.failed.empty());
+  EXPECT_EQ(readAll(root / "out" / "50%25.bin"), "y");
+  EXPECT_EQ(readAll(root / "out" / "bad%FF.bin"), "x");
+}
+
+TEST_F(ExportFixture, ChangedContentUnderAnUnprintableNameIsRefused) {
+  const auto files = scan({{"a\xFF.bin", "first"}});
+  writeBytes(log_path, buildLog({{"a\xFF.bin", "other"}}));
+  const auto result = exportEmbeddedFiles(log_path, {&files[0]}, root / "out", OverwritePolicy::kOverwrite);
+  EXPECT_EQ(result.exported, 0U);
+  EXPECT_EQ(result.failed.size(), 1U);
+}
+
+TEST_F(ExportFixture, FilesWithTheSameTargetPathAreReportedNotOverwritten) {
+  // Both separators split path components, so these two different names resolve to one target.
+  const auto files = scan({{"dir/x.bin", "one"}, {"dir\\x.bin", "two"}, {"ok.bin", "fine"}});
+  ASSERT_EQ(files.size(), 3U);
+  std::vector<const EmbeddedFile*> ptrs;
+  for (const auto& f : files) {
+    ptrs.push_back(&f);
+  }
+  const auto result = exportEmbeddedFiles(log_path, ptrs, root / "out", OverwritePolicy::kOverwrite);
+  EXPECT_EQ(result.exported, 1U);
+  EXPECT_EQ(result.failed.size(), 2U);
+  EXPECT_FALSE(fs::exists(root / "out" / "dir" / "x.bin"));
+  EXPECT_EQ(readAll(root / "out" / "ok.bin"), "fine");
+}

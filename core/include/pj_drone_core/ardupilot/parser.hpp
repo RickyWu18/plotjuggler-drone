@@ -8,6 +8,7 @@
 #include <functional>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -55,7 +56,8 @@ struct FileChunk {
 /// An embedded file as described by the log's FILE messages. The content is not assembled here: it is produced
 /// on demand by streamEmbeddedFile() so the scan keeps no copy of it in memory.
 struct EmbeddedFile {
-  std::string name;
+  std::string name;      // sanitizeFileName(raw_name): what is displayed and what the export path is built from
+  std::string raw_name;  // the name exactly as stored in the log; identifies the file in the digest
   std::vector<FileChunk> chunks;  // log order
   uint64_t estimated_size = 0;      // max(offset + declared Length) over the chunks
   uint64_t size = 0;                // end of the assembled content (what streamEmbeddedFile() produces)
@@ -64,6 +66,10 @@ struct EmbeddedFile {
   uint64_t overlap_bytes = 0;       // bytes provided by more than one chunk (the later chunk wins)
   std::string sha256;             // hex digest of the assembled content, taken at scan time
 };
+
+/// Printable-ASCII form of a name taken from the log: every byte outside 0x20-0x7E becomes "%XX" (two uppercase hex
+/// digits) and '%' becomes "%25". The mapping is injective, so different names stay different.
+std::string sanitizeFileName(std::string_view raw);
 
 /// A run of the assembled content: either bytes copied from the log or a zero-filled gap.
 struct FileSegment {
@@ -83,7 +89,7 @@ std::vector<FileSegment> layoutEmbeddedFile(EmbeddedFile& file);
 bool streamEmbeddedFile(const EmbeddedFile& file, const uint8_t* log, size_t log_length,
                         const std::function<bool(const uint8_t*, size_t)>& write);
 
-/// SHA-256 (hex) over the file's FILE records as they appear in the log: the file name, the chunk count, then for
+/// SHA-256 (hex) over the file's FILE records as they appear in the log: `raw_name`, the chunk count, then for
 /// every chunk, in log order, its offset, declared Length, stored length and data. Every field has a fixed or
 /// length-prefixed size, so different records never produce the same byte sequence. The cost follows the bytes the
 /// log holds, not the size of any gap. Returns an empty string when a chunk lies outside the log.

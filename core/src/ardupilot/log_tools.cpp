@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cstdio>
 #include <fstream>
+#include <map>
 #include <memory>
 
 #include "pj_drone_core/io/mapped_file.hpp"
@@ -55,6 +56,15 @@ bool isSafeComponent(const std::string& c) {
 
 std::filesystem::path pathFromUtf8(std::string_view s) {
   return std::filesystem::path(std::u8string(s.begin(), s.end()));
+}
+
+// Key under which two export targets count as the same file.
+std::string collisionKey(const std::filesystem::path& path) {
+  std::string key = path.generic_string();
+#ifdef _WIN32
+  key = toLower(key);
+#endif
+  return key;
 }
 
 }  // namespace
@@ -231,6 +241,15 @@ ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const st
     result.failed.push_back({file.name, std::move(reason)});
   };
 
+  // Several files resolving to one target would overwrite each other ("a/b" and "a\b" are the same path), so none
+  // of them is written.
+  std::map<std::string, size_t> target_uses;
+  for (const EmbeddedFile* file : files) {
+    if (const auto target = file ? resolveExportPath(dir, file->name) : std::nullopt) {
+      target_uses[collisionKey(*target)]++;
+    }
+  }
+
   // Second read of the log: it may differ from the one that was scanned, so everything is re-checked below.
   io::MappedFile log;
   std::string open_error;
@@ -264,6 +283,10 @@ ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const st
     const auto path = resolveExportPath(dir, requested->name);
     if (!path) {
       fail(*requested, "unsafe file name");
+      continue;
+    }
+    if (target_uses[collisionKey(*path)] > 1) {
+      fail(*requested, "another file in this export has the same target path");
       continue;
     }
     std::error_code ec;
