@@ -82,9 +82,10 @@ struct ExportResult {
   std::vector<std::string> warnings;       // "<name>: <problem>" for exported files with size inconsistencies
 };
 
-/// Re-reads the log at `log_path` and writes each of `files` (as listed by the earlier scan) below `dir`, keeping
-/// its relative path. The content is assembled while streaming to a temporary ".part" file and is only moved into
-/// place when its SHA-256 equals the digest recorded at scan time, so a log that changed in between is refused.
+/// Maps the log at `log_path` again and writes each of `files` (as listed by the earlier scan) below `dir`, keeping
+/// its relative path. The log is not parsed again: the chunks recorded at scan time must reproduce the stored
+/// SHA-256 (a chunk beyond the end of a shortened log counts as a mismatch) before the content is streamed to a
+/// temporary ".part" file, which is only moved into place after the digest is checked once more.
 /// Files whose target paths coincide are all reported as failed instead of overwriting each other.
 ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const std::vector<const EmbeddedFile*>& files,
                                  const std::filesystem::path& dir, OverwritePolicy policy);

@@ -182,6 +182,43 @@ TEST_F(ExportFixture, ChangedLogIsRefused) {
   EXPECT_FALSE(fs::exists(root / "out" / "a.bin"));
 }
 
+TEST_F(ExportFixture, TruncatedLogIsRefusedWithoutReadingPastTheEnd) {
+  const auto files = scan({{"a.bin", "abc"}, {"b.bin", "defgh"}});
+  auto log = buildLog({{"a.bin", "abc"}, {"b.bin", "defgh"}});
+  // A FILE record is 88 bytes with the 64-byte Data field starting at byte 24, so cutting 62 bytes leaves only 2 of
+  // the 5 bytes of "defgh": the last chunk now ends beyond the end of the log.
+  log.resize(log.size() - 62);
+  writeBytes(log_path, log);
+
+  const auto result = exportEmbeddedFiles(log_path, {&files[0], &files[1]}, root / "out", OverwritePolicy::kOverwrite);
+  EXPECT_EQ(result.exported, 1U);
+  ASSERT_EQ(result.failed.size(), 1U);
+  EXPECT_EQ(result.failed[0].name, "b.bin");
+  EXPECT_FALSE(fs::exists(root / "out" / "b.bin"));
+  EXPECT_FALSE(fs::exists(root / "out" / "b.bin.part"));
+}
+
+TEST_F(ExportFixture, ChunksAreCheckedAtTheirScannedPositionsNotFoundAgain) {
+  const auto files = scan({{"a.bin", "abc"}});
+  auto log = buildLog({{"a.bin", "abc"}});
+  log.insert(log.begin(), 0);  // same records, but every recorded position now points one byte too early
+  writeBytes(log_path, log);
+
+  const auto result = exportEmbeddedFiles(log_path, {&files[0]}, root / "out", OverwritePolicy::kOverwrite);
+  EXPECT_EQ(result.exported, 0U);
+  EXPECT_EQ(result.failed.size(), 1U);
+  EXPECT_FALSE(fs::exists(root / "out" / "a.bin"));
+}
+
+TEST_F(ExportFixture, UnsetDigestNeverMatchesAnOutOfRangeChunk) {
+  auto files = scan({{"a.bin", "abc"}});
+  files[0].sha256.clear();  // an unset digest must not equal the empty "chunk outside the log" result
+  files[0].chunks[0].log_pos = size_t{1} << 30;
+  const auto result = exportEmbeddedFiles(log_path, {&files[0]}, root / "out", OverwritePolicy::kOverwrite);
+  EXPECT_EQ(result.exported, 0U);
+  EXPECT_EQ(result.failed.size(), 1U);
+}
+
 TEST_F(ExportFixture, FileWithMissingChunksIsNotExported) {
   auto log = buildLog({});
   putChunk(log, "gap.bin", 0, "aaaa");

@@ -7,7 +7,6 @@
 #include <cstdio>
 #include <fstream>
 #include <map>
-#include <memory>
 
 #include "pj_drone_core/io/mapped_file.hpp"
 
@@ -250,14 +249,11 @@ ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const st
     }
   }
 
-  // Second read of the log: it may differ from the one that was scanned, so everything is re-checked below.
+  // The log is mapped again here: it may differ from the one that was scanned. It is not parsed again; the chunk
+  // positions recorded at scan time are checked against the digest stored then before any byte is written.
   io::MappedFile log;
   std::string open_error;
   const bool opened = log.open(log_path, &open_error);
-  std::unique_ptr<Parser> parser;
-  if (opened) {
-    parser = std::make_unique<Parser>(log.data(), log.size());
-  }
 
   for (const EmbeddedFile* requested : files) {
     if (requested == nullptr) {
@@ -267,16 +263,19 @@ ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const st
       fail(*requested, "cannot read log: " + open_error);
       continue;
     }
-    const auto& fresh_files = parser->embeddedFiles();
-    const auto fresh = std::find_if(fresh_files.begin(), fresh_files.end(),
-                                    [&](const EmbeddedFile& f) { return f.name == requested->name; });
-    if (fresh == fresh_files.end() || fresh->sha256 != requested->sha256) {
+    // An empty digest means a chunk lies outside the (possibly shorter) log; it must never match, not even an
+    // unset stored digest.
+    const auto matches_scan = [&] {
+      const std::string digest = embeddedFileDigest(*requested, log.data(), log.size());
+      return !digest.empty() && digest == requested->sha256;
+    };
+    if (!matches_scan()) {
       fail(*requested, "log changed since it was scanned");
       continue;
     }
 
-    if (fresh->gap_bytes > 0) {
-      fail(*requested, std::to_string(fresh->gap_bytes) + " byte(s) missing between chunks, file is incomplete");
+    if (requested->gap_bytes > 0) {
+      fail(*requested, std::to_string(requested->gap_bytes) + " byte(s) missing between chunks, file is incomplete");
       continue;
     }
 
@@ -321,7 +320,7 @@ ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const st
     bool wrote = false;
     {
       std::ofstream out(part, std::ios::binary | std::ios::trunc);
-      wrote = out.good() && streamEmbeddedFile(*fresh, log.data(), log.size(), [&out](const uint8_t* p, size_t n) {
+      wrote = out.good() && streamEmbeddedFile(*requested, log.data(), log.size(), [&out](const uint8_t* p, size_t n) {
         out.write(reinterpret_cast<const char*>(p), static_cast<std::streamsize>(n));
         return out.good();
       });
@@ -335,7 +334,7 @@ ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const st
     }
     // The bytes were read from the mapping while writing; if the log was modified underneath it, its records no
     // longer match what was scanned.
-    if (embeddedFileDigest(*fresh, log.data(), log.size()) != requested->sha256) {
+    if (!matches_scan()) {
       std::filesystem::remove(part, ec);
       fail(*requested, "log changed while exporting");
       continue;
