@@ -143,6 +143,16 @@
            <string>Size</string>
           </property>
          </column>
+         <column>
+          <property name="text">
+           <string>Data</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Status</string>
+          </property>
+         </column>
         </widget>
        </item>
        <item>
@@ -182,6 +192,66 @@
          </item>
         </layout>
        </item>
+       <item>
+        <widget class="QGroupBox" name="groupConflict">
+         <property name="visible">
+          <bool>false</bool>
+         </property>
+         <property name="title">
+          <string>Files already exist in the export folder</string>
+         </property>
+         <layout class="QVBoxLayout" name="conflictLayout">
+          <item>
+           <widget class="QLabel" name="labelConflict">
+            <property name="text">
+             <string/>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="conflictButtonsLayout">
+            <item>
+             <spacer name="conflictSpacer">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnConflictOverwrite">
+              <property name="text">
+               <string>Overwrite</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnConflictSkip">
+              <property name="text">
+               <string>Skip existing</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnConflictCancel">
+              <property name="text">
+               <string>Cancel export</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
       </layout>
      </widget>
     </widget>
@@ -189,22 +259,54 @@
    <item>
     <layout class="QHBoxLayout" name="bottomLayout">
      <item>
-      <widget class="QLabel" name="labelStatus">
+      <widget class="QScrollArea" name="statusScroll">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Expanding" vsizetype="Preferred"/>
        </property>
-       <property name="text">
-        <string/>
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>90</height>
+        </size>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+       <property name="frameShape">
+        <enum>QFrame::NoFrame</enum>
        </property>
-       <property name="wordWrap">
+       <property name="widgetResizable">
         <bool>true</bool>
        </property>
+       <widget class="QWidget" name="statusScrollContents">
+        <layout class="QVBoxLayout" name="statusLayout">
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item alignment="Qt::AlignTop">
+          <widget class="QLabel" name="labelStatus">
+           <property name="text">
+            <string/>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
       </widget>
      </item>
-     <item>
+     <item alignment="Qt::AlignBottom">
       <widget class="QDialogButtonBox" name="buttonBox">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Fixed" vsizetype="Preferred"/>

@@ -6,6 +6,9 @@
 #include <cctype>
 #include <cstdio>
 #include <fstream>
+#include <map>
+
+#include "pj_drone_core/io/mapped_file.hpp"
 
 namespace pj_drone::ardupilot {
 
@@ -17,11 +20,50 @@ std::string toLower(std::string_view s) {
   return out;
 }
 
-bool isSafeRelativePath(const std::filesystem::path& rel) {
-  if (rel.empty() || rel.is_absolute() || rel.has_root_name() || rel.has_root_directory()) {
+constexpr size_t kMaxNameLength = 1024;
+constexpr size_t kMaxComponentLength = 255;
+
+bool isReservedDeviceName(const std::string& component) {
+  // Windows treats "CON", "con.txt", ... as devices whatever the extension.
+  std::string stem = toLower(component.substr(0, component.find('.')));
+  while (!stem.empty() && stem.back() == ' ') {
+    stem.pop_back();
+  }
+  if (stem == "con" || stem == "prn" || stem == "aux" || stem == "nul") {
+    return true;
+  }
+  return stem.size() == 4 && (stem.compare(0, 3, "com") == 0 || stem.compare(0, 3, "lpt") == 0) && stem[3] >= '0' &&
+         stem[3] <= '9';
+}
+
+bool isSafeComponent(const std::string& c) {
+  if (c.empty() || c == "." || c == ".." || c.size() > kMaxComponentLength) {
     return false;
   }
-  return std::none_of(rel.begin(), rel.end(), [](const std::filesystem::path& part) { return part == ".."; });
+  // A trailing dot or space is silently dropped by Windows, so "x." would alias "x".
+  if (c.back() == '.' || c.back() == ' ') {
+    return false;
+  }
+  for (const char ch : c) {
+    const auto u = static_cast<unsigned char>(ch);
+    if (u < 0x20 || u == 0x7F || std::string_view("<>:\"|?*").find(ch) != std::string_view::npos) {
+      return false;
+    }
+  }
+  return !isReservedDeviceName(c);
+}
+
+std::filesystem::path pathFromUtf8(std::string_view s) {
+  return std::filesystem::path(std::u8string(s.begin(), s.end()));
+}
+
+// Key under which two export targets count as the same file.
+std::string collisionKey(const std::filesystem::path& path) {
+  std::string key = path.generic_string();
+#ifdef _WIN32
+  key = toLower(key);
+#endif
+  return key;
 }
 
 }  // namespace
@@ -88,33 +130,232 @@ bool writeTextFile(const std::filesystem::path& path, const std::string& text) {
   return out.good();
 }
 
-ExportResult exportEmbeddedFiles(const std::vector<const EmbeddedFile*>& files, const std::filesystem::path& dir) {
-  ExportResult result;
+std::vector<std::string> embeddedFileWarnings(const EmbeddedFile& file) {
+  std::vector<std::string> out;
+  if (file.estimated_size != file.size) {
+    out.push_back("declared size " + std::to_string(file.estimated_size) + " bytes (from FILE offsets) but " +
+                  std::to_string(file.size) + " bytes assembled");
+  }
+  if (file.overlap_bytes > 0) {
+    out.push_back(std::to_string(file.overlap_bytes) + " byte(s) provided by several chunks, the later one is used");
+  }
+  return out;
+}
+
+FileCheck checkEmbeddedFile(const EmbeddedFile& file) {
+  FileCheck check;
+  if (!isSafeExportName(file.name)) {
+    check.details.push_back("unsafe file name");
+  }
+  if (file.gap_bytes > 0) {
+    check.details.push_back(std::to_string(file.gap_bytes) + " byte(s) missing between chunks, file is incomplete");
+  }
+  if (!check.details.empty()) {
+    check.status = FileStatus::kCannotExport;
+  }
+  const auto warnings = embeddedFileWarnings(file);
+  if (check.status == FileStatus::kOk && !warnings.empty()) {
+    check.status = FileStatus::kWarning;
+  }
+  check.details.insert(check.details.end(), warnings.begin(), warnings.end());
+  return check;
+}
+
+namespace {
+
+// The relative path `name` stands for, or nullopt when any part of it is unsafe.
+std::optional<std::filesystem::path> safeRelativePath(std::string_view name) {
+  if (name.empty() || name.size() > kMaxNameLength || name.front() == '/' || name.front() == '\\') {
+    return std::nullopt;
+  }
+
+  // Both separators split components on every platform, so a name cannot mean different things per OS.
+  std::filesystem::path relative;
+  size_t start = 0;
+  while (start <= name.size()) {
+    size_t end = name.find_first_of("/\\", start);
+    if (end == std::string_view::npos) {
+      end = name.size();
+    }
+    const std::string component(name.substr(start, end - start));
+    if (!isSafeComponent(component)) {
+      return std::nullopt;
+    }
+    relative /= pathFromUtf8(component);
+    start = end + 1;
+  }
+  return relative;
+}
+
+}  // namespace
+
+bool isSafeExportName(std::string_view name) {
+  return safeRelativePath(name).has_value();
+}
+
+std::optional<std::filesystem::path> resolveExportPath(const std::filesystem::path& dir, std::string_view name) {
+  const auto relative = safeRelativePath(name);
+  if (!relative) {
+    return std::nullopt;
+  }
+
+  std::error_code ec;
+  const auto canonical_dir = std::filesystem::weakly_canonical(dir, ec);
+  if (ec) {
+    return std::nullopt;
+  }
+  const auto target = dir / *relative;
+  const auto canonical_target = std::filesystem::weakly_canonical(target, ec);
+  if (ec) {
+    return std::nullopt;
+  }
+  // Symbolic links / junctions are resolved by weakly_canonical, so a link pointing out of `dir` shows up here.
+  const auto rel_to_dir = canonical_target.lexically_relative(canonical_dir);
+  if (rel_to_dir.empty() || rel_to_dir.is_absolute() || *rel_to_dir.begin() == "..") {
+    return std::nullopt;
+  }
+  return target;
+}
+
+std::vector<std::string> findExportConflicts(const std::vector<const EmbeddedFile*>& files,
+                                             const std::filesystem::path& dir) {
+  std::vector<std::string> conflicts;
   for (const EmbeddedFile* file : files) {
     if (file == nullptr) {
       continue;
     }
-    const std::filesystem::path rel{std::u8string(file->name.begin(), file->name.end())};
-    if (!isSafeRelativePath(rel)) {
-      result.failed.push_back(file->name);
-      continue;
-    }
-
-    const std::filesystem::path path = dir / rel;
+    const auto path = resolveExportPath(dir, file->name);
     std::error_code ec;
-    std::filesystem::create_directories(path.parent_path(), ec);
+    if (path && std::filesystem::exists(std::filesystem::symlink_status(*path, ec))) {
+      conflicts.push_back(file->name);
+    }
+  }
+  return conflicts;
+}
 
-    std::ofstream out(path, std::ios::binary);
-    if (!out) {
-      result.failed.push_back(file->name);
+ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const std::vector<const EmbeddedFile*>& files,
+                                 const std::filesystem::path& dir, OverwritePolicy policy) {
+  ExportResult result;
+  const auto fail = [&result](const EmbeddedFile& file, std::string reason) {
+    result.failed.push_back({file.name, std::move(reason)});
+  };
+
+  // Several files resolving to one target would overwrite each other ("a/b" and "a\b" are the same path), so none
+  // of them is written.
+  std::map<std::string, size_t> target_uses;
+  for (const EmbeddedFile* file : files) {
+    if (const auto target = file ? resolveExportPath(dir, file->name) : std::nullopt) {
+      target_uses[collisionKey(*target)]++;
+    }
+  }
+
+  // The log is mapped again here: it may differ from the one that was scanned. It is not parsed again; the chunk
+  // positions recorded at scan time are checked against the digest stored then before any byte is written.
+  io::MappedFile log;
+  std::string open_error;
+  const bool opened = log.open(log_path, &open_error);
+
+  for (const EmbeddedFile* requested : files) {
+    if (requested == nullptr) {
       continue;
     }
-    out.write(reinterpret_cast<const char*>(file->data.data()), static_cast<std::streamsize>(file->data.size()));
-    if (!out.good()) {
-      result.failed.push_back(file->name);
+    if (!opened) {
+      fail(*requested, "cannot read log: " + open_error);
       continue;
     }
+    // An empty digest means a chunk lies outside the (possibly shorter) log; it must never match, not even an
+    // unset stored digest.
+    const auto matches_scan = [&] {
+      const std::string digest = embeddedFileDigest(*requested, log.data(), log.size());
+      return !digest.empty() && digest == requested->sha256;
+    };
+    if (!matches_scan()) {
+      fail(*requested, "log changed since it was scanned");
+      continue;
+    }
+
+    if (requested->gap_bytes > 0) {
+      fail(*requested, std::to_string(requested->gap_bytes) + " byte(s) missing between chunks, file is incomplete");
+      continue;
+    }
+
+    const auto path = resolveExportPath(dir, requested->name);
+    if (!path) {
+      fail(*requested, "unsafe file name");
+      continue;
+    }
+    if (target_uses[collisionKey(*path)] > 1) {
+      fail(*requested, "another file in this export has the same target path");
+      continue;
+    }
+    std::error_code ec;
+    const auto existing = std::filesystem::symlink_status(*path, ec);
+    const bool exists = std::filesystem::exists(existing);
+    if (exists && !std::filesystem::is_regular_file(existing)) {
+      fail(*requested, "target exists and is not a regular file");
+      continue;
+    }
+    if (exists && policy == OverwritePolicy::kSkipExisting) {
+      result.skipped.push_back(requested->name);
+      continue;
+    }
+
+    std::filesystem::create_directories(path->parent_path(), ec);
+    if (ec) {
+      fail(*requested, "cannot create directory");
+      continue;
+    }
+
+    // The temporary name must not belong to anything the user already has: pick the first unused ".part" name.
+    auto part = *path;
+    part += ".part";
+    for (int n = 1; std::filesystem::exists(std::filesystem::symlink_status(part, ec)) && n < 1000; n++) {
+      part = *path;
+      part += "." + std::to_string(n) + ".part";
+    }
+    if (std::filesystem::exists(std::filesystem::symlink_status(part, ec))) {
+      fail(*requested, "no free temporary file name");
+      continue;
+    }
+    bool wrote = false;
+    {
+      std::ofstream out(part, std::ios::binary | std::ios::trunc);
+      wrote = out.good() && streamEmbeddedFile(*requested, log.data(), log.size(), [&out](const uint8_t* p, size_t n) {
+        out.write(reinterpret_cast<const char*>(p), static_cast<std::streamsize>(n));
+        return out.good();
+      });
+      out.close();
+      wrote = wrote && !out.fail();
+    }
+    if (!wrote) {
+      std::filesystem::remove(part, ec);
+      fail(*requested, "could not write file");
+      continue;
+    }
+    // The bytes were read from the mapping while writing; if the log was modified underneath it, its records no
+    // longer match what was scanned.
+    if (!matches_scan()) {
+      std::filesystem::remove(part, ec);
+      fail(*requested, "log changed while exporting");
+      continue;
+    }
+    // A file may have appeared since the check above; never replace it when the user chose to skip.
+    if (policy == OverwritePolicy::kSkipExisting && std::filesystem::exists(std::filesystem::symlink_status(*path, ec))) {
+      std::filesystem::remove(part, ec);
+      result.skipped.push_back(requested->name);
+      continue;
+    }
+    std::filesystem::rename(part, *path, ec);
+    if (ec) {
+      std::filesystem::remove(part, ec);
+      fail(*requested, "could not move file into place");
+      continue;
+    }
+
     result.exported++;
+    for (const auto& warning : embeddedFileWarnings(*requested)) {
+      result.warnings.push_back(requested->name + ": " + warning);
+    }
   }
   return result;
 }

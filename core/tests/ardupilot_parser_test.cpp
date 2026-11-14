@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "pj_drone_core/ardupilot/parser.hpp"
+#include "pj_drone_core/util/sha256.hpp"
 
 using namespace pj_drone::ardupilot;
 
@@ -38,6 +39,24 @@ void fmt(std::vector<uint8_t>& out, uint8_t type, uint8_t len, const std::string
   putStr(out, name, 4);
   putStr(out, format, 16);
   putStr(out, labels, 64);
+}
+
+void fileChunk(std::vector<uint8_t>& out, const std::string& name, uint32_t offset, uint8_t length,
+               const std::string& data) {
+  header(out, 162);
+  putStr(out, name, 16);
+  put<uint32_t>(out, offset);
+  put<uint8_t>(out, length);
+  putStr(out, data, 64);
+}
+
+std::string assembled(const EmbeddedFile& file, const std::vector<uint8_t>& log) {
+  std::string out;
+  EXPECT_TRUE(streamEmbeddedFile(file, log.data(), log.size(), [&out](const uint8_t* p, size_t n) {
+    out.append(reinterpret_cast<const char*>(p), n);
+    return true;
+  }));
+  return out;
 }
 
 struct Group {
@@ -228,8 +247,93 @@ TEST(ArdupilotParser, CollectsParametersMessagesAndFilesWithoutSink) {
 
   ASSERT_EQ(parser.embeddedFiles().size(), 1U);
   EXPECT_EQ(parser.embeddedFiles()[0].name, "@SYS/x.txt");
-  EXPECT_EQ(std::string(parser.embeddedFiles()[0].data.begin(), parser.embeddedFiles()[0].data.end()), "hello");
+  EXPECT_EQ(parser.embeddedFiles()[0].size, 5U);
+  EXPECT_EQ(parser.embeddedFiles()[0].estimated_size, 5U);
+  EXPECT_EQ(assembled(parser.embeddedFiles()[0], log), "hello");
   EXPECT_EQ(parser.totalSamples(), 0U);
+}
+
+TEST(ArdupilotParser, FileSizeComesFromChunksNotFromDeclaredLength) {
+  std::vector<uint8_t> log;
+  fmt(log, 162, 88, "FILE", "NIBZ", "FileName,Offset,Length,Data");
+  fileChunk(log, "a.bin", 0, 4, "abcd");
+  fileChunk(log, "a.bin", 8, 4, "ijkl");  // bytes 4..8 never logged
+  fileChunk(log, "b.bin", 0, 100, std::string(64, 'x'));  // declares 100 bytes, a chunk holds at most 64
+
+  Parser parser(log.data(), log.size());
+  ASSERT_EQ(parser.embeddedFiles().size(), 2U);
+  const auto& a = parser.embeddedFiles()[0];
+  EXPECT_EQ(a.size, 12U);
+  EXPECT_EQ(a.estimated_size, 12U);
+  EXPECT_EQ(a.gap_bytes, 4U);
+  EXPECT_EQ(a.covered_bytes, 8U);
+  // A file with a gap is never produced: no invented bytes.
+  EXPECT_FALSE(streamEmbeddedFile(a, log.data(), log.size(), [](const uint8_t*, size_t) { return true; }));
+
+  const auto& b = parser.embeddedFiles()[1];
+  EXPECT_EQ(b.size, 64U);
+  EXPECT_EQ(b.estimated_size, 100U);
+  EXPECT_EQ(assembled(b, log), std::string(64, 'x'));
+}
+
+TEST(ArdupilotParser, LaterChunkWinsWhereChunksOverlap) {
+  std::vector<uint8_t> log;
+  fmt(log, 162, 88, "FILE", "NIBZ", "FileName,Offset,Length,Data");
+  fileChunk(log, "a.bin", 0, 6, "AAAAAA");
+  fileChunk(log, "a.bin", 2, 2, "bb");  // later in the log: replaces bytes 2..4
+
+  Parser parser(log.data(), log.size());
+  ASSERT_EQ(parser.embeddedFiles().size(), 1U);
+  const auto& a = parser.embeddedFiles()[0];
+  EXPECT_EQ(assembled(a, log), "AAbbAA");
+  EXPECT_EQ(a.overlap_bytes, 2U);
+  EXPECT_EQ(a.gap_bytes, 0U);
+}
+
+TEST(ArdupilotParser, ScanHashMatchesAssembledContent) {
+  std::vector<uint8_t> log;
+  fmt(log, 162, 88, "FILE", "NIBZ", "FileName,Offset,Length,Data");
+  fileChunk(log, "a.bin", 0, 3, "abc");
+
+  Parser parser(log.data(), log.size());
+  ASSERT_EQ(parser.embeddedFiles().size(), 1U);
+  // Digest = name length + name, chunk count, then per chunk: offset (LE32), Length, stored length, data.
+  pj_drone::util::Sha256 expected;
+  const uint8_t head[] = {5, 0, 0, 0, 0, 0, 0, 0, 'a', '.', 'b', 'i', 'n', 1, 0, 0, 0, 0, 0, 0, 0};
+  const uint8_t chunk_fixed[] = {0, 0, 0, 0, 3, 3};
+  expected.update(head, sizeof(head));
+  expected.update(chunk_fixed, sizeof(chunk_fixed));
+  expected.update(reinterpret_cast<const uint8_t*>("abc"), 3);
+  EXPECT_EQ(parser.embeddedFiles()[0].sha256, expected.hexDigest());
+}
+
+TEST(ArdupilotParser, DigestCoversEveryRecordIncludingShadowedChunks) {
+  const auto digest_of = [](const std::vector<std::pair<uint32_t, std::string>>& chunks) {
+    std::vector<uint8_t> log;
+    fmt(log, 162, 88, "FILE", "NIBZ", "FileName,Offset,Length,Data");
+    for (const auto& [offset, data] : chunks) {
+      fileChunk(log, "a.bin", offset, static_cast<uint8_t>(data.size()), data);
+    }
+    Parser parser(log.data(), log.size());
+    return parser.embeddedFiles().at(0).sha256;
+  };
+
+  const auto base = digest_of({{0, "AAAA"}, {0, "BBBB"}});
+  EXPECT_EQ(base, digest_of({{0, "AAAA"}, {0, "BBBB"}}));
+  EXPECT_NE(base, digest_of({{0, "XXXX"}, {0, "BBBB"}}));  // shadowed chunk changed, exported bytes did not
+  EXPECT_NE(base, digest_of({{0, "BBBB"}, {0, "AAAA"}}));  // order changed
+  EXPECT_NE(digest_of({{0, "ab"}, {2, "cd"}}), digest_of({{0, "abcd"}}));  // split differently, same content
+}
+
+TEST(ArdupilotParser, HugeGapDoesNotCostTimeWhileScanning) {
+  std::vector<uint8_t> log;
+  fmt(log, 162, 88, "FILE", "NIBZ", "FileName,Offset,Length,Data");
+  fileChunk(log, "far.bin", 200U * 1024 * 1024, 1, "x");  // 200 MiB of nothing before one byte
+
+  Parser parser(log.data(), log.size());
+  ASSERT_EQ(parser.embeddedFiles().size(), 1U);
+  EXPECT_EQ(parser.embeddedFiles()[0].size, 200U * 1024 * 1024 + 1);
+  EXPECT_EQ(parser.embeddedFiles()[0].covered_bytes, 1U);
 }
 
 TEST(ArdupilotParser, FilesAreSkippedWhenDisabled) {

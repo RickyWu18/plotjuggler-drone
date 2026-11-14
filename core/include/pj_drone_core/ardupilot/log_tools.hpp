@@ -3,6 +3,7 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <regex>
 #include <string>
 #include <string_view>
@@ -39,13 +40,54 @@ std::string buildParamFileText(const std::vector<Parameter>& params);
 
 bool writeTextFile(const std::filesystem::path& path, const std::string& text);
 
-struct ExportResult {
-  size_t exported = 0;
-  std::vector<std::string> failed;  // embedded-file names that could not be written
+/// Inconsistencies that do not stop an export: the declared (offset based) size differing from the assembled
+/// size, and chunks that overlap. Empty when the file is consistent.
+std::vector<std::string> embeddedFileWarnings(const EmbeddedFile& file);
+
+/// Whether `name` (a path taken from the log, so untrusted) could be exported below any folder.
+bool isSafeExportName(std::string_view name);
+
+enum class FileStatus { kOk, kWarning, kCannotExport };
+
+struct FileCheck {
+  FileStatus status = FileStatus::kOk;
+  std::vector<std::string> details;  // one line per finding, blocking ones first
 };
 
-/// Writes each file below `dir`, keeping its relative path (e.g. "@SYS/crash_dump.bin" ->
-/// <dir>/@SYS/crash_dump.bin). A name that is absolute or climbs out of `dir` ("..") is reported as failed.
-ExportResult exportEmbeddedFiles(const std::vector<const EmbeddedFile*>& files, const std::filesystem::path& dir);
+/// What the file list shows for `file`: kCannotExport for an unsafe name or missing chunks (gaps), kWarning when
+/// embeddedFileWarnings() has something to say, otherwise kOk.
+FileCheck checkEmbeddedFile(const EmbeddedFile& file);
+
+/// Where `name` (a path taken from the log, so untrusted) lands below `dir`, e.g. "@SYS/crash.bin" ->
+/// <dir>/@SYS/crash.bin. Returns nullopt when the name is unsafe: absolute, drive-relative, empty or "."/".."
+/// components, characters or device names that are invalid on common file systems, or a result that does not
+/// stay inside `dir` once symbolic links are resolved.
+std::optional<std::filesystem::path> resolveExportPath(const std::filesystem::path& dir, std::string_view name);
+
+/// Names of `files` whose export target already exists below `dir`.
+std::vector<std::string> findExportConflicts(const std::vector<const EmbeddedFile*>& files,
+                                             const std::filesystem::path& dir);
+
+enum class OverwritePolicy { kOverwrite, kSkipExisting };
+
+struct ExportFailure {
+  std::string name;
+  std::string reason;
+};
+
+struct ExportResult {
+  size_t exported = 0;
+  std::vector<std::string> skipped;        // target existed and the policy was kSkipExisting
+  std::vector<ExportFailure> failed;       // could not be exported
+  std::vector<std::string> warnings;       // "<name>: <problem>" for exported files with size inconsistencies
+};
+
+/// Maps the log at `log_path` again and writes each of `files` (as listed by the earlier scan) below `dir`, keeping
+/// its relative path. The log is not parsed again: the chunks recorded at scan time must reproduce the stored
+/// SHA-256 (a chunk beyond the end of a shortened log counts as a mismatch) before the content is streamed to a
+/// temporary ".part" file, which is only moved into place after the digest is checked once more.
+/// Files whose target paths coincide are all reported as failed instead of overwriting each other.
+ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const std::vector<const EmbeddedFile*>& files,
+                                 const std::filesystem::path& dir, OverwritePolicy policy);
 
 }  // namespace pj_drone::ardupilot

@@ -17,6 +17,7 @@ add_library(pj_drone_core STATIC
   src/ardupilot/log_tools.cpp
   src/io/mapped_file.cpp
   src/io/serial_ports.cpp
+  src/util/sha256.cpp
   src/mavlink/decoder.cpp)
 add_library(pj_drone::core ALIAS pj_drone_core)
 
@@ -33,7 +34,8 @@ if(PJ_BUILD_TESTS)
   add_executable(pj_drone_core_test
     tests/ardupilot_parser_test.cpp
     tests/log_tools_test.cpp
-    tests/mavlink_decoder_test.cpp)
+    tests/mavlink_decoder_test.cpp
+    tests/sha256_test.cpp)
   target_compile_options(pj_drone_core_test PRIVATE ${PJ_WARNING_FLAGS})
   target_include_directories(pj_drone_core_test SYSTEM PRIVATE ${PJ_MAVLINK_INCLUDE_DIR})
   target_link_libraries(pj_drone_core_test PRIVATE pj_drone::core GTest::gtest_main)

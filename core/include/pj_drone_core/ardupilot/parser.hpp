@@ -8,6 +8,7 @@
 #include <functional>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -44,10 +45,55 @@ struct Parameter {
   double value = 0.0;
 };
 
-struct EmbeddedFile {
-  std::string name;
-  std::vector<uint8_t> data;
+/// One FILE message of an embedded file. The payload stays in the log; only its position is recorded.
+struct FileChunk {
+  uint32_t offset = 0;         // position of the chunk inside the embedded file
+  uint8_t declared_length = 0; // the FILE message's Length field
+  uint8_t length = 0;          // bytes actually stored (min of Length, 64 and the Data field size)
+  size_t log_pos = 0;          // position of the chunk's first byte inside the log
 };
+
+/// An embedded file as described by the log's FILE messages. The content is not assembled here: it is produced
+/// on demand by streamEmbeddedFile() so the scan keeps no copy of it in memory.
+struct EmbeddedFile {
+  std::string name;      // sanitizeFileName(raw_name): what is displayed and what the export path is built from
+  std::string raw_name;  // the name exactly as stored in the log; identifies the file in the digest
+  std::vector<FileChunk> chunks;  // log order
+  uint64_t estimated_size = 0;      // max(offset + declared Length) over the chunks
+  uint64_t size = 0;                // end of the assembled content (what streamEmbeddedFile() produces)
+  uint64_t covered_bytes = 0;       // bytes backed by chunk data (size - gap_bytes)
+  uint64_t gap_bytes = 0;           // bytes inside `size` that no chunk provides; a file with gaps is not exportable
+  uint64_t overlap_bytes = 0;       // bytes provided by more than one chunk (the later chunk wins)
+  std::string sha256;             // hex digest of the assembled content, taken at scan time
+};
+
+/// Printable-ASCII form of a name taken from the log: every byte outside 0x20-0x7E becomes "%XX" (two uppercase hex
+/// digits) and '%' becomes "%25". The mapping is injective, so different names stay different.
+std::string sanitizeFileName(std::string_view raw);
+
+/// A run of the assembled content: either bytes copied from the log or a zero-filled gap.
+struct FileSegment {
+  uint64_t file_offset = 0;
+  uint64_t length = 0;
+  size_t log_pos = 0;  // unused for gaps
+  bool is_gap = false;
+};
+
+/// Resolves the chunks of `file` into ordered, non-overlapping segments. Where chunks overlap, the one that
+/// appears later in the log wins. Also fills the size / coverage fields from the chunks.
+std::vector<FileSegment> layoutEmbeddedFile(EmbeddedFile& file);
+
+/// Feeds the assembled content of `file` to `write` in order, reading from the log bytes. Returns false when the
+/// file has a gap (missing chunks are never replaced by invented bytes), a chunk lies outside the log, or `write`
+/// returns false.
+bool streamEmbeddedFile(const EmbeddedFile& file, const uint8_t* log, size_t log_length,
+                        const std::function<bool(const uint8_t*, size_t)>& write);
+
+/// SHA-256 (hex) over the file's FILE records as they appear in the log: `raw_name`, the chunk count, then for
+/// every chunk, in log order, its offset, declared Length, stored length and data. Every field has a fixed or
+/// length-prefixed size, so different records never produce the same byte sequence. The cost follows the bytes the
+/// log holds, not the size of any gap. Returns an empty string when a chunk lies outside the log.
+std::string embeddedFileDigest(const EmbeddedFile& file, const uint8_t* log, size_t log_length);
 
 struct LogMessage {
   double timestamp = 0.0;  // seconds since boot
@@ -62,7 +108,7 @@ struct MessageStats {
 struct ParserOptions {
   using ProgressCallback = std::function<bool(size_t pos, size_t total)>;  // return false to cancel
 
-  bool load_files = true;      // assemble embedded FILE messages
+  bool load_files = true;      // index embedded FILE messages (content is only assembled on export)
   bool hash_instance = false;  // "GPS/#0" instead of "GPS/0"
   ProgressCallback progress;
 };
@@ -157,7 +203,7 @@ class Parser {
   void parseMultPacket(const uint8_t* payload, const MessageDef& def);
   void parseFmtuPacket(const uint8_t* payload, const MessageDef& def);
   void parseFilePacket(const uint8_t* payload, const MessageDef& def);
-  void assembleEmbeddedFiles();
+  void indexEmbeddedFiles();
 
   std::vector<FieldSpec> buildFieldSpecs(const MessageDef& def) const;
 
@@ -187,7 +233,7 @@ class Parser {
   std::vector<Parameter> params_;
   std::unordered_map<std::string, size_t> params_index_;
 
-  std::unordered_map<std::string, std::vector<std::pair<uint32_t, std::vector<uint8_t>>>> file_chunks_;
+  std::unordered_map<std::string, std::vector<FileChunk>> file_chunks_;
   std::vector<EmbeddedFile> embedded_files_;
   std::vector<LogMessage> msg_log_;
 };
