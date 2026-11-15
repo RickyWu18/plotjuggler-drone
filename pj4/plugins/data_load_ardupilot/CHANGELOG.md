@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-15
+
 ### Changed
 - Embedded files are no longer assembled in memory while the log is scanned; the content is built only when you
   export, streamed straight to disk.
@@ -22,6 +24,13 @@
 ### Added
 - When the export folder already contains a file with the same name, the dialog asks whether to overwrite or skip
   the existing files.
+
+### Fixed
+- A corrupt record (unknown message id or impossible length) no longer ends the import: the parser resynchronizes on
+  the next header and keeps the rest of the log.
+- Message id 0 is no longer mistaken for an undefined UNIT / MULT / FMTU / FILE message.
+- A topic or field the host rejects, or a FMT label repeated with the same type, now only drops that group or column
+  instead of failing the whole import.
 
 ## [1.0.0] - 2026-11-08
 
