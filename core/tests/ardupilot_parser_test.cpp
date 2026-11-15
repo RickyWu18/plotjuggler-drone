@@ -414,3 +414,44 @@ TEST(ArdupilotParser, GarbageIsSkippedUntilNextHeader) {
   Parser parser(log.data(), log.size(), {}, &sink);
   EXPECT_EQ(sink.rows.size(), 1U);
 }
+
+TEST(ArdupilotParser, MessageIdZeroIsDecodedWithoutUnitMultFmtuFileDefinitions) {
+  std::vector<uint8_t> log;
+  fmt(log, 0, 19, "CTUN", "Qff", "TimeUS,A,B");
+  header(log, 0);
+  put<uint64_t>(log, 7);
+  put(log, 1.0F);
+  put(log, 2.0F);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+  ASSERT_EQ(sink.rows.size(), 1U);
+  EXPECT_EQ(sink.groups[sink.rows[0].group].name, "CTUN");
+}
+
+TEST(ArdupilotParser, UnknownMessageIdResyncsInsteadOfEndingTheParse) {
+  std::vector<uint8_t> log;
+  defineAtt(log);
+  att(log, 1, 1.0F, 2.0F);
+  header(log, 200);  // no FMT for id 200
+  log.push_back(0x55);
+  att(log, 2, 1.0F, 2.0F);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+  EXPECT_EQ(parser.result(), Parser::Result::kOk);
+  EXPECT_EQ(sink.rows.size(), 2U);
+}
+
+TEST(ArdupilotParser, OversizedDefinitionLengthResyncsInsteadOfEndingTheParse) {
+  std::vector<uint8_t> log;
+  fmt(log, 171, 255, "BIG", "Q", "TimeUS");
+  defineAtt(log);
+  att(log, 1, 1.0F, 2.0F);
+  header(log, 171);  // claims 252 payload bytes; fewer remain
+  att(log, 2, 1.0F, 2.0F);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+  EXPECT_EQ(sink.rows.size(), 2U);
+}
