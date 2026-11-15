@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+#include <algorithm>
 #include <filesystem>
 #include <nlohmann/json.hpp>
 #include <pj_base/sdk/data_source_patterns.hpp>
@@ -62,7 +63,13 @@ class HostSink : public ap::SampleSink {
       group.topic = *topic;
       for (size_t i = 0; i < fields.size(); ++i) {
         auto handle = host_.ensureField(*topic, displayName(fields[i]), toPrimitive(fields[i].type));
-        if (handle) {
+        if (!handle) {
+          continue;
+        }
+        // A repeated FMT label with the same type resolves to the same field; appendBoundRecord rejects a record
+        // that binds one field twice, so keep only the first column.
+        auto same_field = [&](const PJ::sdk::FieldHandle& other) { return other.id == handle->id; };
+        if (std::none_of(group.handles.begin(), group.handles.end(), same_field)) {
           group.columns.push_back(i);
           group.handles.push_back(*handle);
         }
@@ -74,6 +81,10 @@ class HostSink : public ap::SampleSink {
 
   bool append(size_t group_id, int64_t timestamp_ns, const ap::SampleValue* values, size_t count) override {
     if (!error_.empty()) {
+      return false;
+    }
+    if (group_id >= groups_.size()) {
+      fail("internal error: unknown group id");
       return false;
     }
     const Group& group = groups_[group_id];
