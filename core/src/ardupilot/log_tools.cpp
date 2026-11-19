@@ -36,12 +36,17 @@ bool isReservedDeviceName(const std::string& component) {
          stem[3] <= '9';
 }
 
+// Windows silently drops trailing dots and spaces, so "x." means "x" there. The export always uses the stripped
+// name, which makes every platform write the same file; a collision with another file is caught by the callers.
+std::string stripTrailingDotsAndSpaces(std::string c) {
+  while (!c.empty() && (c.back() == '.' || c.back() == ' ')) {
+    c.pop_back();
+  }
+  return c;
+}
+
 bool isSafeComponent(const std::string& c) {
   if (c.empty() || c == "." || c == ".." || c.size() > kMaxComponentLength) {
-    return false;
-  }
-  // A trailing dot or space is silently dropped by Windows, so "x." would alias "x".
-  if (c.back() == '.' || c.back() == ' ') {
     return false;
   }
   for (const char ch : c) {
@@ -177,8 +182,9 @@ std::optional<std::filesystem::path> safeRelativePath(std::string_view name) {
     if (end == std::string_view::npos) {
       end = name.size();
     }
-    const std::string component(name.substr(start, end - start));
-    if (!isSafeComponent(component)) {
+    const std::string raw(name.substr(start, end - start));
+    const std::string component = (raw == "." || raw == "..") ? raw : stripTrailingDotsAndSpaces(raw);
+    if (raw.size() > kMaxComponentLength || !isSafeComponent(component)) {
       return std::nullopt;
     }
     relative /= pathFromUtf8(component);

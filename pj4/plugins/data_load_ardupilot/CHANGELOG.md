@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+- Embedded file names ending in a dot or space are exportable again: the trailing dots/spaces are removed (as Windows
+  does) and the file is written under the stripped name. If that name equals another file in the same export, all of
+  them are still reported instead of written; an existing file in the folder goes through the overwrite/skip prompt.
+
 ## [1.1.0] - 2026-11-15
 
 ### Changed

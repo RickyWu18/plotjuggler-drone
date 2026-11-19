@@ -61,7 +61,8 @@ FileCheck checkEmbeddedFile(const EmbeddedFile& file);
 /// Where `name` (a path taken from the log, so untrusted) lands below `dir`, e.g. "@SYS/crash.bin" ->
 /// <dir>/@SYS/crash.bin. Returns nullopt when the name is unsafe: absolute, drive-relative, empty or "."/".."
 /// components, characters or device names that are invalid on common file systems, or a result that does not
-/// stay inside `dir` once symbolic links are resolved.
+/// stay inside `dir` once symbolic links are resolved. Trailing dots and spaces of each component are removed
+/// ("x." lands as "x"); two names that end up on the same path are rejected together at export time.
 std::optional<std::filesystem::path> resolveExportPath(const std::filesystem::path& dir, std::string_view name);
 
 /// Names of `files` whose export target already exists below `dir`.
