@@ -4,5 +4,13 @@
   "dependencies": [
     "qt5-base",
     "qt5-serialport"
-  ]
+  ],
+  "features": {
+    "tests": {
+      "description": "GTest for the pj_drone_core unit tests (use with -DPJ_BUILD_TESTS=ON)",
+      "dependencies": [
+        "gtest"
+      ]
+    }
+  }
 }

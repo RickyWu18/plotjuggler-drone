@@ -55,3 +55,18 @@ cmake --build build\PlotJuggler-Drone --config Release --target install
 - Set `isDebugPlugin()` to `true` during development; change to `false` before release.
 - Always hold `mutex()` when writing to `dataMap()` from a background thread.
 - Call `emit dataReceived()` after each data push to notify PlotJuggler to refresh.
+
+## Running the `core` unit tests
+
+Configure with `-DPJ_BUILD_TESTS=ON -DVCPKG_MANIFEST_FEATURES=tests` (the `tests` feature in `vcpkg.json` installs GTest), build, then run `ctest` from the build directory:
+
+```powershell
+cmake -G "Visual Studio 16 2019" `
+      -S src\PlotJuggler-Drone\pj3 `
+      -B build\PlotJuggler-Drone `
+      -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
+      -DPJ_BUILD_TESTS=ON `
+      -DVCPKG_MANIFEST_FEATURES=tests
+cmake --build build\PlotJuggler-Drone --config Release
+ctest --test-dir build\PlotJuggler-Drone -C Release
+```

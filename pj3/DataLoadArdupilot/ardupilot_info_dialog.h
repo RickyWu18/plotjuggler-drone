@@ -7,7 +7,8 @@
 #include <QModelIndex>
 #include <QString>
 #include <vector>
-#include "ardupilot_parser.h"
+
+#include "pj_drone_core/ardupilot/parser.hpp"
 
 namespace Ui { class ArdupilotInfoDialog; }
 
@@ -25,9 +26,11 @@ class ArdupilotInfoDialog : public QDialog
   Q_OBJECT
 
 public:
-  explicit ArdupilotInfoDialog(const std::vector<ApParameter>& params,
-                               const std::vector<ApEmbeddedFile>& files,
-                               const std::vector<ApLogMessage>& msgs,
+  // `log_path` is the log the embedded files were indexed from: exporting reads their content from it again.
+  explicit ArdupilotInfoDialog(const std::vector<pj_drone::ardupilot::Parameter>& params,
+                               const std::vector<pj_drone::ardupilot::EmbeddedFile>& files,
+                               const std::vector<pj_drone::ardupilot::LogMessage>& msgs,
+                               const QString& log_path,
                                const ApLoadStats& stats = {},
                                QWidget* parent = nullptr);
   ~ArdupilotInfoDialog() override;
@@ -48,5 +51,7 @@ private:
 #endif
 
   Ui::ArdupilotInfoDialog* ui;
-  std::vector<ApEmbeddedFile> _embeddedFiles;
+  std::vector<pj_drone::ardupilot::Parameter> _params;
+  std::vector<pj_drone::ardupilot::EmbeddedFile> _embeddedFiles;
+  QString _logPath;
 };

@@ -53,6 +53,13 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+# ── Shared drone core (pure C++17, no Qt / PlotJuggler SDK) ─────────────────
+option(PJ_BUILD_TESTS "Build the pj_drone_core unit tests (needs GTest)" OFF)
+if(PJ_BUILD_TESTS)
+  enable_testing()
+endif()
+add_subdirectory(${DRONE_ROOT_DIR}/core ${CMAKE_BINARY_DIR}/core)
+
 # ── Plugins ────────────────────────────────────────────────────────────────
 add_subdirectory(DataStreamMavlink)
 add_subdirectory(DataLoadArdupilot)
