@@ -137,7 +137,7 @@ TEST(LogTools, TrailingDotsAndSpacesAreStrippedFromTheExportPath) {
   EXPECT_EQ(resolveExportPath(dir, "x."), dir / "x");
   EXPECT_EQ(resolveExportPath(dir, "x. . "), dir / "x");
   EXPECT_EQ(resolveExportPath(dir, "a./b "), dir / "a" / "b");
-  EXPECT_TRUE(isSafeExportName("x."));
+  EXPECT_NE(checkEmbeddedFile(EmbeddedFile{.name = "x."}).status, FileStatus::kCannotExport);
 }
 
 TEST_F(ExportFixture, UnsafeNameIsReportedAndNothingEscapes) {

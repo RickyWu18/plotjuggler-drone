@@ -44,9 +44,6 @@ bool writeTextFile(const std::filesystem::path& path, const std::string& text);
 /// size, and chunks that overlap. Empty when the file is consistent.
 std::vector<std::string> embeddedFileWarnings(const EmbeddedFile& file);
 
-/// Whether `name` (a path taken from the log, so untrusted) could be exported below any folder.
-bool isSafeExportName(std::string_view name);
-
 enum class FileStatus { kOk, kWarning, kCannotExport };
 
 struct FileCheck {
@@ -65,7 +62,7 @@ FileCheck checkEmbeddedFile(const EmbeddedFile& file);
 /// ("x." lands as "x"); two names that end up on the same path are rejected together at export time.
 std::optional<std::filesystem::path> resolveExportPath(const std::filesystem::path& dir, std::string_view name);
 
-/// Names of `files` whose export target already exists below `dir`.
+/// Export paths (relative to `dir`, as written) of `files` whose target already exists below `dir`.
 std::vector<std::string> findExportConflicts(const std::vector<const EmbeddedFile*>& files,
                                              const std::filesystem::path& dir);
 
@@ -78,9 +75,9 @@ struct ExportFailure {
 
 struct ExportResult {
   size_t exported = 0;
-  std::vector<std::string> skipped;        // target existed and the policy was kSkipExisting
+  std::vector<std::string> skipped;        // exported path; target existed and the policy was kSkipExisting
   std::vector<ExportFailure> failed;       // could not be exported
-  std::vector<std::string> warnings;       // "<name>: <problem>" for exported files with size inconsistencies
+  std::vector<std::string> warnings;       // "<exported path>: <problem>" for exported files with size inconsistencies
 };
 
 /// Maps the log at `log_path` again and writes each of `files` (as listed by the earlier scan) below `dir`, keeping

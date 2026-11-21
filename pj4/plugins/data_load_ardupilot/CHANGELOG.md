@@ -6,6 +6,8 @@
 - Embedded file names ending in a dot or space are exportable again: the trailing dots/spaces are removed (as Windows
   does) and the file is written under the stripped name. If that name equals another file in the same export, all of
   them are still reported instead of written; an existing file in the folder goes through the overwrite/skip prompt.
+  The overwrite prompt, the skipped list and the warnings name the file as it is written ("x"), not as it is named in
+  the log ("x.").
 
 ## [1.1.0] - 2026-11-15
 
