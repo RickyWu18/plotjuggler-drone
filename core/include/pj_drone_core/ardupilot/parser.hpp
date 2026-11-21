@@ -171,8 +171,8 @@ class Parser {
     size_t payload_size = 0;  // sum of the fields' byte sizes
     int timestamp_idx = -1;
     int instance_idx = -1;
-    std::vector<size_t> numeric_idx;  // indices of the fields that are delivered to the sink
-    size_t group = kNoGroup;          // non-instance messages
+    std::vector<size_t> delivered_idx;  // indices of the fields that are delivered to the sink
+    size_t group = kNoGroup;            // non-instance messages
     std::unordered_map<int, size_t> instance_groups;
     int stats_idx = -1;
     bool finalized = false;
@@ -194,6 +194,7 @@ class Parser {
   static std::vector<std::string> splitLabels(const char* buf, size_t len);
   static double float16ToDouble(uint16_t bits);
   static ValueType nativeType(char fmt_char);
+  static SampleValue decodeField(const uint8_t* payload, const FieldDef& field);
   static SampleValue decodeNative(const uint8_t* p, char fmt_char);
   static double decodeDouble(const uint8_t* p, char fmt_char);
 

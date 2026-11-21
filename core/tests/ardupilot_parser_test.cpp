@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstring>
 #include <string>
+#include <string_view>
+#include <variant>
 #include <vector>
 
 #include "pj_drone_core/ardupilot/parser.hpp"
@@ -84,6 +87,24 @@ class RecordingSink : public SampleSink {
   bool fail = false;
 };
 
+// A compliant sink: string values are views into the log that are valid during append() only, so it copies them
+// there and keeps nothing else that points into the log.
+class CopyingSink : public SampleSink {
+ public:
+  size_t declareGroup(const std::string&, const std::vector<FieldSpec>&) override {
+    return 0;
+  }
+  bool append(size_t, int64_t, const SampleValue* values, size_t count) override {
+    for (size_t i = 0; i < count; i++) {
+      if (const auto* view = std::get_if<std::string_view>(&values[i])) {
+        strings.emplace_back(*view);
+      }
+    }
+    return true;
+  }
+  std::vector<std::string> strings;
+};
+
 // ATT: type 130, "Qff" TimeUS,Roll,Pitch  (3 + 8 + 4 + 4 = 19 bytes)
 void defineAtt(std::vector<uint8_t>& out) {
   fmt(out, 130, 19, "ATT", "Qff", "TimeUS,Roll,Pitch");
@@ -142,6 +163,27 @@ TEST(ArdupilotParser, StringFieldsAreDelivered) {
   EXPECT_EQ(sink.groups[0].fields[1].type, ValueType::kString);
   ASSERT_EQ(sink.rows.size(), 1U);
   EXPECT_EQ(std::get<std::string_view>(sink.rows[0].values[1]), "Arming checks passed");
+}
+
+TEST(ArdupilotParser, StringValuesCopiedInAppendOutliveTheLogBuffer) {
+  std::vector<uint8_t> log;
+  fmt(log, 132, 75, "MSG", "QZ", "TimeUS,Message");
+  for (const char* text : {"Arming checks passed", "EKF3 IMU0 is using GPS"}) {
+    header(log, 132);
+    put<uint64_t>(log, 2000000);
+    putStr(log, text, 64);
+  }
+
+  CopyingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+  ASSERT_EQ(parser.result(), Parser::Result::kOk);
+
+  // Invalidate the memory the views pointed into: only copies made during append() may survive.
+  std::fill(log.begin(), log.end(), uint8_t{0xFF});
+
+  ASSERT_EQ(sink.strings.size(), 2U);
+  EXPECT_EQ(sink.strings[0], "Arming checks passed");
+  EXPECT_EQ(sink.strings[1], "EKF3 IMU0 is using GPS");
 }
 
 TEST(ArdupilotParser, ImplicitFormatScalingIsDeliveredAsDouble) {

@@ -69,8 +69,8 @@ void Parser::parse() {
 
 std::vector<FieldSpec> Parser::buildFieldSpecs(const MessageDef& def) const {
   std::vector<FieldSpec> specs;
-  specs.reserve(def.numeric_idx.size());
-  for (const size_t idx : def.numeric_idx) {
+  specs.reserve(def.delivered_idx.size());
+  for (const size_t idx : def.delivered_idx) {
     const FieldDef& f = def.fields[idx];
     FieldSpec spec;
     spec.name = f.label;
@@ -94,6 +94,10 @@ void Parser::finalizeDef(MessageDef& def) {
 
   // Cache mult_val on every field so the decode hot-path needs no map lookup
   for (auto& field : def.fields) {
+    if (field.is_string) {
+      field.type = ValueType::kString;  // never scaled: mult_val / scaled keep their defaults
+      continue;
+    }
     if (field.mult_id == '?') {
       switch (field.fmt_char) {
         case 'c':
@@ -117,12 +121,8 @@ void Parser::finalizeDef(MessageDef& def) {
       const auto it = mult_table_.find(field.mult_id);
       field.mult_val = (it != mult_table_.end() && it->second != 0.0) ? it->second : 1.0;
     }
-    field.scaled = field.mult_val != 1.0 && !field.is_string;
-    if (field.is_string) {
-      field.type = ValueType::kString;
-    } else {
-      field.type = field.scaled ? ValueType::kFloat64 : nativeType(field.fmt_char);
-    }
+    field.scaled = field.mult_val != 1.0;
+    field.type = field.scaled ? ValueType::kFloat64 : nativeType(field.fmt_char);
   }
 
   if (is_special) {
@@ -133,10 +133,10 @@ void Parser::finalizeDef(MessageDef& def) {
     def.timestamp_idx = -1;
   }
 
-  def.numeric_idx.clear();
+  def.delivered_idx.clear();
   for (size_t i = 0; i < def.fields.size(); i++) {
     if (!def.fields[i].is_array) {
-      def.numeric_idx.push_back(i);
+      def.delivered_idx.push_back(i);
     }
   }
 
@@ -412,6 +412,18 @@ ValueType Parser::nativeType(char fmt_char) {
   }
 }
 
+SampleValue Parser::decodeField(const uint8_t* payload, const FieldDef& field) {
+  const uint8_t* p = payload + field.offset;
+  if (field.is_string) {
+    const char* s = reinterpret_cast<const char*>(p);
+    return std::string_view(s, strnlen(s, field.byte_size));
+  }
+  if (field.scaled) {
+    return decodeDouble(p, field.fmt_char) * field.mult_val;
+  }
+  return decodeNative(p, field.fmt_char);
+}
+
 SampleValue Parser::decodeNative(const uint8_t* p, char fmt_char) {
   switch (fmt_char) {
     case 'Q':
@@ -549,16 +561,8 @@ bool Parser::parseDataPacket(const uint8_t* payload, MessageDef& def) {
   // Decode every delivered field (array fields are skipped).
   std::array<SampleValue, kMaxFields> values;
   size_t count = 0;
-  for (const size_t idx : def.numeric_idx) {
-    const FieldDef& field = def.fields[idx];
-    if (field.is_string) {
-      const char* s = reinterpret_cast<const char*>(payload + field.offset);
-      values[count++] = std::string_view(s, strnlen(s, field.byte_size));
-    } else if (field.scaled) {
-      values[count++] = decodeDouble(payload + field.offset, field.fmt_char) * field.mult_val;
-    } else {
-      values[count++] = decodeNative(payload + field.offset, field.fmt_char);
-    }
+  for (const size_t idx : def.delivered_idx) {
+    values[count++] = decodeField(payload, def.fields[idx]);
   }
 
   total_samples_ += count;

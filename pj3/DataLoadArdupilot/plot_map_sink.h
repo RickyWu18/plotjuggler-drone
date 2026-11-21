@@ -29,12 +29,10 @@ public:
     series.reserve(fields.size());
     for (const auto& field : fields)
     {
-      Column col;
       if (field.type == pj_drone::ardupilot::ValueType::kString)
-        col.text = &_dest.getOrCreateStringSeries(displayName(name, field));
+        series.emplace_back(&_dest.getOrCreateStringSeries(displayName(name, field)));
       else
-        col.number = &_dest.getOrCreateNumeric(displayName(name, field));
-      series.push_back(col);
+        series.emplace_back(&_dest.getOrCreateNumeric(displayName(name, field)));
     }
     _groups.push_back(std::move(series));
     return _groups.size() - 1;
@@ -47,21 +45,16 @@ public:
     const auto& series = _groups[group];
     for (size_t i = 0; i < count; i++)
     {
-      if (series[i].text != nullptr)
-      {
-        // Empty strings are dropped by StringSeries::pushBack.
-        series[i].text->pushBack(std::make_pair(t, PJ::StringRef(std::get<std::string_view>(values[i]))));
-        continue;
-      }
-      const double v = std::visit(
-          [](auto x) {
-            if constexpr (std::is_arithmetic_v<decltype(x)>)
-              return static_cast<double>(x);
+      // The column alternative always matches the value alternative: both derive from FieldSpec::type.
+      std::visit(
+          [&](auto x) {
+            if constexpr (std::is_same_v<decltype(x), std::string_view>)
+              // Empty strings are dropped by StringSeries::pushBack.
+              std::get<PJ::StringSeries*>(series[i])->pushBack(std::make_pair(t, PJ::StringRef(x)));
             else
-              return 0.0;  // not reachable: string fields go to a StringSeries above
+              std::get<PJ::PlotData*>(series[i])->pushBack({ t, static_cast<double>(x) });
           },
           values[i]);
-      series[i].number->pushBack({ t, v });
     }
     return true;  // cancelling goes through the parser's progress callback
   }
@@ -92,12 +85,8 @@ private:
   PJ::PlotDataMapRef& _dest;
   bool _show_units;
   bool _official_compat;
-  // One column per delivered field: exactly one of the two pointers is set.
-  struct Column
-  {
-    PJ::PlotData* number = nullptr;
-    PJ::StringSeries* text = nullptr;
-  };
+  // One column per delivered field: a numeric or a string series.
+  using Column = std::variant<PJ::PlotData*, PJ::StringSeries*>;
   std::vector<std::vector<Column>> _groups;
 };
 
