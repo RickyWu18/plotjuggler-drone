@@ -126,6 +126,24 @@ TEST(ArdupilotParser, DecodesNativeTypesAndNanosecondTimestamps) {
   EXPECT_EQ(parser.messageStats()[0].count, 2U);
 }
 
+TEST(ArdupilotParser, StringFieldsAreDelivered) {
+  // MSG: "QZ" TimeUS,Message  (3 + 8 + 64 = 75)
+  std::vector<uint8_t> log;
+  fmt(log, 132, 75, "MSG", "QZ", "TimeUS,Message");
+  header(log, 132);
+  put<uint64_t>(log, 2000000);
+  putStr(log, "Arming checks passed", 64);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  ASSERT_EQ(sink.groups[0].fields.size(), 2U);
+  EXPECT_EQ(sink.groups[0].fields[1].name, "Message");
+  EXPECT_EQ(sink.groups[0].fields[1].type, ValueType::kString);
+  ASSERT_EQ(sink.rows.size(), 1U);
+  EXPECT_EQ(std::get<std::string_view>(sink.rows[0].values[1]), "Arming checks passed");
+}
+
 TEST(ArdupilotParser, ImplicitFormatScalingIsDeliveredAsDouble) {
   // "QcL": c -> x1e-2, L -> x1e-7 when no FMTU says otherwise.  3 + 8 + 2 + 4 = 17
   std::vector<uint8_t> log;

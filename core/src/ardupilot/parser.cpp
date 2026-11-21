@@ -117,8 +117,12 @@ void Parser::finalizeDef(MessageDef& def) {
       const auto it = mult_table_.find(field.mult_id);
       field.mult_val = (it != mult_table_.end() && it->second != 0.0) ? it->second : 1.0;
     }
-    field.scaled = field.mult_val != 1.0;
-    field.type = field.scaled ? ValueType::kFloat64 : nativeType(field.fmt_char);
+    field.scaled = field.mult_val != 1.0 && !field.is_string;
+    if (field.is_string) {
+      field.type = ValueType::kString;
+    } else {
+      field.type = field.scaled ? ValueType::kFloat64 : nativeType(field.fmt_char);
+    }
   }
 
   if (is_special) {
@@ -131,7 +135,7 @@ void Parser::finalizeDef(MessageDef& def) {
 
   def.numeric_idx.clear();
   for (size_t i = 0; i < def.fields.size(); i++) {
-    if (!def.fields[i].is_string && !def.fields[i].is_array) {
+    if (!def.fields[i].is_array) {
       def.numeric_idx.push_back(i);
     }
   }
@@ -542,12 +546,15 @@ bool Parser::parseDataPacket(const uint8_t* payload, MessageDef& def) {
     group = it->second;
   }
 
-  // Decode every numeric field (string and array fields are skipped).
+  // Decode every delivered field (array fields are skipped).
   std::array<SampleValue, kMaxFields> values;
   size_t count = 0;
   for (const size_t idx : def.numeric_idx) {
     const FieldDef& field = def.fields[idx];
-    if (field.scaled) {
+    if (field.is_string) {
+      const char* s = reinterpret_cast<const char*>(payload + field.offset);
+      values[count++] = std::string_view(s, strnlen(s, field.byte_size));
+    } else if (field.scaled) {
       values[count++] = decodeDouble(payload + field.offset, field.fmt_char) * field.mult_val;
     } else {
       values[count++] = decodeNative(payload + field.offset, field.fmt_char);
