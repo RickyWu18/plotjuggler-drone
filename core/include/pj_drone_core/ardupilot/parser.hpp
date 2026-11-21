@@ -16,10 +16,12 @@
 namespace pj_drone::ardupilot {
 
 /// A decoded numeric sample in its native type. A field whose unit multiplier is not 1 (MULT / FMTU, or the
-/// implicit scaling of the 'c' 'C' 'e' 'E' 'L' format characters) is delivered as double.
-using SampleValue = std::variant<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double>;
+/// implicit scaling of the 'c' 'C' 'e' 'E' 'L' format characters) is delivered as double. A string field
+/// ('n' 'N' 'Z') is a view into the log: valid during append() only.
+using SampleValue = std::variant<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double,
+                                 std::string_view>;
 
-enum class ValueType { kInt8, kUint8, kInt16, kUint16, kInt32, kUint32, kInt64, kUint64, kFloat32, kFloat64 };
+enum class ValueType { kInt8, kUint8, kInt16, kUint16, kInt32, kUint32, kInt64, kUint64, kFloat32, kFloat64, kString };
 
 struct FieldSpec {
   std::string name;
@@ -28,7 +30,7 @@ struct FieldSpec {
 };
 
 /// Receives decoded data. Each group is one message type (or one message type + instance); its fields are the
-/// message's numeric fields in log order (string and array fields are not delivered).
+/// message's numeric and string fields in log order (array fields are not delivered).
 class SampleSink {
  public:
   virtual ~SampleSink() = default;
@@ -169,8 +171,8 @@ class Parser {
     size_t payload_size = 0;  // sum of the fields' byte sizes
     int timestamp_idx = -1;
     int instance_idx = -1;
-    std::vector<size_t> numeric_idx;  // indices of the fields that are delivered to the sink
-    size_t group = kNoGroup;          // non-instance messages
+    std::vector<size_t> delivered_idx;  // indices of the fields that are delivered to the sink
+    size_t group = kNoGroup;            // non-instance messages
     std::unordered_map<int, size_t> instance_groups;
     int stats_idx = -1;
     bool finalized = false;
@@ -192,6 +194,7 @@ class Parser {
   static std::vector<std::string> splitLabels(const char* buf, size_t len);
   static double float16ToDouble(uint16_t bits);
   static ValueType nativeType(char fmt_char);
+  static SampleValue decodeField(const uint8_t* payload, const FieldDef& field);
   static SampleValue decodeNative(const uint8_t* p, char fmt_char);
   static double decodeDouble(const uint8_t* p, char fmt_char);
 

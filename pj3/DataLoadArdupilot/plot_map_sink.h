@@ -6,13 +6,15 @@
 
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
 
 #include "pj_drone_core/ardupilot/parser.hpp"
 
-// Writes the parser's groups straight into the PlotJuggler 3 data map: one series per numeric field.
+// Writes the parser's groups straight into the PlotJuggler 3 data map: one numeric series per numeric field and one
+// string series per string field.
 class PlotMapSink : public pj_drone::ardupilot::SampleSink
 {
 public:
@@ -23,11 +25,14 @@ public:
 
   size_t declareGroup(const std::string& name, const std::vector<pj_drone::ardupilot::FieldSpec>& fields) override
   {
-    std::vector<PJ::PlotData*> series;
+    std::vector<Column> series;
     series.reserve(fields.size());
     for (const auto& field : fields)
     {
-      series.push_back(&_dest.getOrCreateNumeric(displayName(name, field)));
+      if (field.type == pj_drone::ardupilot::ValueType::kString)
+        series.emplace_back(&_dest.getOrCreateStringSeries(displayName(name, field)));
+      else
+        series.emplace_back(&_dest.getOrCreateNumeric(displayName(name, field)));
     }
     _groups.push_back(std::move(series));
     return _groups.size() - 1;
@@ -40,8 +45,16 @@ public:
     const auto& series = _groups[group];
     for (size_t i = 0; i < count; i++)
     {
-      const double v = std::visit([](auto x) { return static_cast<double>(x); }, values[i]);
-      series[i]->pushBack({ t, v });
+      // The column alternative always matches the value alternative: both derive from FieldSpec::type.
+      std::visit(
+          [&](auto x) {
+            if constexpr (std::is_same_v<decltype(x), std::string_view>)
+              // Empty strings are dropped by StringSeries::pushBack.
+              std::get<PJ::StringSeries*>(series[i])->pushBack(std::make_pair(t, PJ::StringRef(x)));
+            else
+              std::get<PJ::PlotData*>(series[i])->pushBack({ t, static_cast<double>(x) });
+          },
+          values[i]);
     }
     return true;  // cancelling goes through the parser's progress callback
   }
@@ -72,6 +85,8 @@ private:
   PJ::PlotDataMapRef& _dest;
   bool _show_units;
   bool _official_compat;
-  std::vector<std::vector<PJ::PlotData*>> _groups;
+  // One column per delivered field: a numeric or a string series.
+  using Column = std::variant<PJ::PlotData*, PJ::StringSeries*>;
+  std::vector<std::vector<Column>> _groups;
 };
 

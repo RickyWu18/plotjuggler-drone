@@ -40,6 +40,8 @@ PJ::PrimitiveType toPrimitive(ap::ValueType type) {
       return PJ::PrimitiveType::kFloat32;
     case ap::ValueType::kFloat64:
       return PJ::PrimitiveType::kFloat64;
+    case ap::ValueType::kString:
+      return PJ::PrimitiveType::kString;
   }
   return PJ::PrimitiveType::kFloat64;
 }
