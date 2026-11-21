@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 
 set(SRC
-    ardupilot_parser.h          ardupilot_parser.cpp
     dataload_ardupilot.h        dataload_ardupilot.cpp
     ardupilot_info_dialog.h     ardupilot_info_dialog.cpp
-    ardupilot_info_dialog.ui)
+    ardupilot_info_dialog.ui
+    qt_path.h
+    plot_map_sink.h)
 
 add_library(DataLoadArdupilot SHARED ${SRC})
 
@@ -26,6 +27,7 @@ target_link_libraries(DataLoadArdupilot PRIVATE
     Qt5::Core
     Qt5::Widgets
     Qt5::Xml
+    pj_drone::core
     ${PJ_BASE_LIB})
 
 install(TARGETS DataLoadArdupilot

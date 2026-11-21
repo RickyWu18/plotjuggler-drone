@@ -54,7 +54,11 @@ bool isSafeComponent(const std::string& c) {
 }
 
 std::filesystem::path pathFromUtf8(std::string_view s) {
+#if defined(__cpp_char8_t) && defined(__cpp_lib_char8_t)
   return std::filesystem::path(std::u8string(s.begin(), s.end()));
+#else
+  return std::filesystem::u8path(s.begin(), s.end());  // C++17: no char8_t; u8path is deprecated only from C++20
+#endif
 }
 
 // Key under which two export targets count as the same file.

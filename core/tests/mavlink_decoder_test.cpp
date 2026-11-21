@@ -6,8 +6,7 @@
 
 #include "pj_drone_core/mavlink/decoder.hpp"
 
-#define MAVLINK_USE_MESSAGE_INFO
-#include "all/mavlink.h"
+#include "mavlink/mavlink_all.hpp"
 
 namespace mav = pj_drone::mavlink;
 

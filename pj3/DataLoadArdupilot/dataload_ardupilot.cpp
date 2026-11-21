@@ -1,22 +1,27 @@
 // SPDX-License-Identifier: MIT
 
 #include "dataload_ardupilot.h"
-#include "ardupilot_parser.h"
 #include "ardupilot_info_dialog.h"
+#include "plot_map_sink.h"
+#include "qt_path.h"
+
+#include "pj_drone_core/ardupilot/parser.hpp"
+#include "pj_drone_core/io/mapped_file.hpp"
 
 #include <QApplication>
 #include <QCheckBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QElapsedTimer>
-#include <QFile>
 #include <QFileInfo>
 #include <QProgressBar>
 #include <QProgressDialog>
 #include <QSettings>
 #include <QVBoxLayout>
-#include <QtCore/qscopeguard.h>
+#include <filesystem>
 #include <stdexcept>
+
+namespace ap = pj_drone::ardupilot;
 
 const std::vector<const char*>& DataLoadArdupilot::compatibleFileExtensions() const
 {
@@ -59,22 +64,15 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
     pref.setValue("official_compat", official_compat);
   }
 
-  QFile file(info->filename);
-  if (!file.open(QIODevice::ReadOnly))
+  const std::filesystem::path log_path = pathFromQString(info->filename);
+  pj_drone::io::MappedFile mapped;
+  std::string map_error;
+  if (!mapped.open(log_path, &map_error))
   {
-    throw std::runtime_error("ArduPilot: failed to open file: " +
-                             info->filename.toStdString());
+    throw std::runtime_error("ArduPilot: failed to open file: " + info->filename.toStdString() +
+                             (map_error.empty() ? "" : " (" + map_error + ")"));
   }
-
-  const qint64 file_size = file.size();
-  if (file_size == 0) return false;
-
-  const uchar* mapped = file.map(0, file_size);
-  if (!mapped)
-  {
-    throw std::runtime_error("ArduPilot: failed to memory-map file");
-  }
-  auto unmap_guard = qScopeGuard([&]{ file.unmap(const_cast<uchar*>(mapped)); });  // D4
+  if (mapped.size() == 0) return false;
 
   QWidget* main_window = QApplication::activeWindow();
 
@@ -97,52 +95,37 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
   QElapsedTimer load_timer;    // total load time for Debug tab
   parse_timer.start();
   load_timer.start();
-  ArdupilotParser parser(
-      reinterpret_cast<const uint8_t*>(mapped),
-      static_cast<size_t>(file_size),
-      load_files,
-      official_compat,
-      [&](size_t pos, size_t total) -> bool {
-        if (parse_timer.elapsed() < 50) return true;
-        parse_timer.restart();
-        progress_dialog.setValue(static_cast<int>(100.0 * pos / total));
-        QApplication::processEvents();
-        return !progress_dialog.wasCanceled();
-      },
-      // Write-through sink: build display key and obtain PlotData* once per series (⑤)
-      [&](const std::string& key, const std::string& unit) -> PJ::PlotData* {
-        std::string disp_unit;
-        disp_unit.reserve(unit.size() + 4);
-        for (char ch : unit)
-          ch == '/' ? disp_unit += "\xe2\x88\x95" : disp_unit += ch;
+  PlotMapSink sink(dest, show_units, official_compat);
 
-        std::string display_key;
-        if (official_compat) display_key = "/" + key;
-        else                 display_key = key;
-        if (show_units && !disp_unit.empty())
-          display_key.append("(").append(disp_unit).append(")");
+  ap::ParserOptions options;
+  options.load_files    = load_files;
+  options.hash_instance = official_compat;
+  options.progress      = [&](size_t pos, size_t total) -> bool {
+    if (parse_timer.elapsed() < 50) return true;
+    parse_timer.restart();
+    progress_dialog.setValue(static_cast<int>(100.0 * pos / total));
+    QApplication::processEvents();
+    return !progress_dialog.wasCanceled();
+  };
 
-        return &dest.getOrCreateNumeric(display_key);
-      });
+  ap::Parser parser(mapped.data(), mapped.size(), std::move(options), &sink);
 
-  if (progress_dialog.wasCanceled())
+  if (parser.result() != ap::Parser::Result::kOk)
   {
-    dest.clear();  // write-through: partial data may already be in dest
+    dest.clear();  // the sink writes through: partial data may already be in dest
     return false;
   }
 
-  const auto& series_map     = parser.getSeriesMap();
-  const size_t total_samples = parser.getTotalSamples();
-
   ApLoadStats stats;
   stats.load_ms       = load_timer.elapsed();
-  stats.file_size     = file_size;
-  stats.total_samples = total_samples;
-  stats.series_count  = series_map.size();
+  stats.file_size     = static_cast<qint64>(mapped.size());
+  stats.total_samples = parser.totalSamples();
+  stats.series_count  = parser.seriesCount();
 
-  auto* dlg = new ArdupilotInfoDialog(parser.getParameters(),
-                                      parser.getEmbeddedFiles(),
-                                      parser.getLogMessages(),
+  auto* dlg = new ArdupilotInfoDialog(parser.parameters(),
+                                      parser.embeddedFiles(),
+                                      parser.logMessages(),
+                                      info->filename,
                                       stats,
                                       main_window);
   dlg->setWindowTitle(

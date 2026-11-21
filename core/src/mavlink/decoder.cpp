@@ -5,8 +5,7 @@
 #include <cstring>
 #include <unordered_map>
 
-#define MAVLINK_USE_MESSAGE_INFO
-#include "all/mavlink.h"
+#include "mavlink_all.hpp"
 
 namespace pj_drone::mavlink {
 
