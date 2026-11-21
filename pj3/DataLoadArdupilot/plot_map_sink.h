@@ -5,7 +5,6 @@
 #include <PlotJuggler/plotdata.h>
 
 #include <cstdint>
-#include <functional>
 #include <string>
 #include <utility>
 #include <variant>
@@ -17,10 +16,8 @@
 class PlotMapSink : public pj_drone::ardupilot::SampleSink
 {
 public:
-  PlotMapSink(PJ::PlotDataMapRef& dest, bool show_units, bool official_compat,
-              std::function<bool()> keep_going)
-    : _dest(dest), _show_units(show_units), _official_compat(official_compat),
-      _keep_going(std::move(keep_going))
+  PlotMapSink(PJ::PlotDataMapRef& dest, bool show_units, bool official_compat)
+    : _dest(dest), _show_units(show_units), _official_compat(official_compat)
   {
   }
 
@@ -46,7 +43,7 @@ public:
       const double v = std::visit([](auto x) { return static_cast<double>(x); }, values[i]);
       series[i]->pushBack({ t, v });
     }
-    return _keep_going();
+    return true;  // cancelling goes through the parser's progress callback
   }
 
 private:
@@ -63,7 +60,7 @@ private:
       for (char ch : field.unit)
       {
         if (ch == '/')
-          key += "∕";  // U+2215 DIVISION SLASH, so a unit never looks like a path separator
+          key += "\xe2\x88\x95";  // U+2215 DIVISION SLASH, so a unit never looks like a path separator
         else
           key.push_back(ch);
       }
@@ -75,7 +72,6 @@ private:
   PJ::PlotDataMapRef& _dest;
   bool _show_units;
   bool _official_compat;
-  std::function<bool()> _keep_going;
   std::vector<std::vector<PJ::PlotData*>> _groups;
 };
 

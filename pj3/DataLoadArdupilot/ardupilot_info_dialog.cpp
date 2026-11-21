@@ -56,6 +56,9 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ap::Parameter>& param
 {
   ui->setupUi(this);
 
+  _fileChecks.reserve(files.size());
+  for (const auto& f : files) _fileChecks.push_back(ap::checkEmbeddedFile(f));
+
   // --- Parameters tab ---
   auto* table = ui->tableParams;
   table->setUpdatesEnabled(false);
@@ -92,8 +95,6 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ap::Parameter>& param
   auto* ftable = ui->tableFiles;
   ftable->setUpdatesEnabled(false);
   ftable->setSortingEnabled(false);
-  ftable->setColumnCount(4);
-  ftable->setHorizontalHeaderLabels({ "Filename", "Size", "Data", "Status" });
   ftable->setRowCount(static_cast<int>(files.size()));
   ftable->setEditTriggers(QAbstractItemView::NoEditTriggers);
   ftable->verticalHeader()->setVisible(false);
@@ -114,21 +115,20 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(const std::vector<ap::Parameter>& param
         new QTableWidgetItem(
             QString::number(static_cast<qulonglong>(files[row].covered_bytes)) + " bytes"));
 
-    const auto check = ap::checkEmbeddedFile(files[row]);
+    const auto& check = _fileChecks[static_cast<size_t>(row)];
     auto* statusItem = new QTableWidgetItem(statusText(check.status));
     statusItem->setToolTip(joinLines(check.details));
     ftable->setItem(row, 3, statusItem);
   }
-  ftable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-  ftable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-  ftable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+  for (int col = 1; col <= 3; col++)
+    ftable->horizontalHeader()->setSectionResizeMode(col, QHeaderView::ResizeToContents);
   ftable->setSortingEnabled(true);
   ftable->setUpdatesEnabled(true);
 
   // "Export All" is available when at least one file can be exported
   ui->btnExportAll->setEnabled(
-      std::any_of(files.begin(), files.end(), [](const ap::EmbeddedFile& f) {
-        return ap::checkEmbeddedFile(f).status != ap::FileStatus::kCannotExport;
+      std::any_of(_fileChecks.begin(), _fileChecks.end(), [](const ap::FileCheck& c) {
+        return c.status != ap::FileStatus::kCannotExport;
       }));
 
   connect(ftable, &QTableWidget::itemSelectionChanged, this, [this](){
@@ -237,9 +237,8 @@ void ArdupilotInfoDialog::exportFilesToFolder(const QList<QModelIndex>& rows)
     const int ef_idx = nameItem->data(Qt::UserRole).toInt();
     if (ef_idx < 0 || ef_idx >= static_cast<int>(_embeddedFiles.size())) continue;
 
-    const auto& ef = _embeddedFiles[static_cast<size_t>(ef_idx)];
-    if (ap::checkEmbeddedFile(ef).status == ap::FileStatus::kCannotExport) continue;
-    toExport.push_back(&ef);
+    if (_fileChecks[static_cast<size_t>(ef_idx)].status == ap::FileStatus::kCannotExport) continue;
+    toExport.push_back(&_embeddedFiles[static_cast<size_t>(ef_idx)]);
   }
   if (toExport.empty())
   {
@@ -367,7 +366,6 @@ void ArdupilotInfoDialog::restoreSettings()
   ui->tableFiles->horizontalHeader()->restoreState(
       settings.value("ArdupilotParamsDialog/filesTableState").toByteArray());
   ui->tableFiles->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-  ui->tableFiles->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-  ui->tableFiles->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-  ui->tableFiles->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+  for (int col = 1; col <= 3; col++)
+    ui->tableFiles->horizontalHeader()->setSectionResizeMode(col, QHeaderView::ResizeToContents);
 }

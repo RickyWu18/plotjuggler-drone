@@ -95,8 +95,7 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
   QElapsedTimer load_timer;    // total load time for Debug tab
   parse_timer.start();
   load_timer.start();
-  bool cancelled = false;
-  PlotMapSink sink(dest, show_units, official_compat, [&] { return !cancelled; });
+  PlotMapSink sink(dest, show_units, official_compat);
 
   ap::ParserOptions options;
   options.load_files    = load_files;
@@ -106,8 +105,7 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
     parse_timer.restart();
     progress_dialog.setValue(static_cast<int>(100.0 * pos / total));
     QApplication::processEvents();
-    cancelled = progress_dialog.wasCanceled();
-    return !cancelled;
+    return !progress_dialog.wasCanceled();
   };
 
   ap::Parser parser(mapped.data(), mapped.size(), std::move(options), &sink);

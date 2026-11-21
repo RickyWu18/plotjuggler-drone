@@ -37,6 +37,7 @@ if(PJ_BUILD_TESTS)
     tests/mavlink_decoder_test.cpp
     tests/sha256_test.cpp)
   target_compile_options(pj_drone_core_test PRIVATE ${PJ_WARNING_FLAGS})
+  target_include_directories(pj_drone_core_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_include_directories(pj_drone_core_test SYSTEM PRIVATE ${PJ_MAVLINK_INCLUDE_DIR})
   target_link_libraries(pj_drone_core_test PRIVATE pj_drone::core GTest::gtest_main)
   add_test(NAME pj_drone_core_test COMMAND pj_drone_core_test)

@@ -13,8 +13,6 @@ target_include_directories(DataLoadArdupilot PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${PJ_INCLUDE_DIR})
 
-target_compile_options(DataLoadArdupilot PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
-
 target_compile_definitions(DataLoadArdupilot PRIVATE
     QT_PLUGIN
     FMT_HEADER_ONLY

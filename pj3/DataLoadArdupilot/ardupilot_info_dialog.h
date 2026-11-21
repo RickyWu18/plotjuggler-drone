@@ -53,5 +53,6 @@ private:
   Ui::ArdupilotInfoDialog* ui;
   std::vector<pj_drone::ardupilot::Parameter> _params;
   std::vector<pj_drone::ardupilot::EmbeddedFile> _embeddedFiles;
+  std::vector<pj_drone::ardupilot::FileCheck> _fileChecks;  // parallel to _embeddedFiles
   QString _logPath;
 };
