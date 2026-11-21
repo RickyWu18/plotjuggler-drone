@@ -124,12 +124,20 @@ TEST(LogTools, ResolveExportPathRejectsUnsafeNames) {
   EXPECT_TRUE(resolveExportPath(dir, "plain.bin").has_value());
 
   for (const char* bad : {"", "../evil.bin", "a/../../evil.bin", "..", ".", "/abs.bin", "\\abs.bin", "a\\..\\..\\x",
-                          "C:\\evil.bin", "C:evil.bin", "a:stream", "dir/", "a//b", "con", "NUL.txt", "lpt1", "x.",
-                          "x ", "a<b", "a|b", "a?b", "a*b", "tab\there"}) {
+                          "C:\\evil.bin", "C:evil.bin", "a:stream", "dir/", "a//b", "con", "NUL.txt", "lpt1", "...",
+                          " ", "con.", "a/. /b", "a<b", "a|b", "a?b", "a*b", "tab\there"}) {
     EXPECT_FALSE(resolveExportPath(dir, bad).has_value()) << bad;
   }
   EXPECT_FALSE(resolveExportPath(dir, std::filesystem::absolute("evil_abs.bin").string()).has_value());
   EXPECT_FALSE(resolveExportPath(dir, std::string("nul\0x", 5)).has_value());
+}
+
+TEST(LogTools, TrailingDotsAndSpacesAreStrippedFromTheExportPath) {
+  const auto dir = fs::temp_directory_path() / "pj_drone_core_resolve_test";
+  EXPECT_EQ(resolveExportPath(dir, "x."), dir / "x");
+  EXPECT_EQ(resolveExportPath(dir, "x. . "), dir / "x");
+  EXPECT_EQ(resolveExportPath(dir, "a./b "), dir / "a" / "b");
+  EXPECT_NE(checkEmbeddedFile(EmbeddedFile{.name = "x."}).status, FileStatus::kCannotExport);
 }
 
 TEST_F(ExportFixture, UnsafeNameIsReportedAndNothingEscapes) {

@@ -36,21 +36,30 @@ bool isReservedDeviceName(const std::string& component) {
          stem[3] <= '9';
 }
 
-bool isSafeComponent(const std::string& c) {
-  if (c.empty() || c == "." || c == ".." || c.size() > kMaxComponentLength) {
-    return false;
+// The component as it is exported, or nullopt when it is unsafe. Windows silently drops trailing dots and spaces,
+// so "x." means "x" there; the export always uses the stripped name, which makes every platform write the same
+// file. A collision with another file is caught by exportEmbeddedFiles.
+std::optional<std::string> normalizeComponent(std::string_view raw) {
+  if (raw.size() > kMaxComponentLength) {
+    return std::nullopt;
   }
-  // A trailing dot or space is silently dropped by Windows, so "x." would alias "x".
-  if (c.back() == '.' || c.back() == ' ') {
-    return false;
+  std::string c(raw);
+  while (!c.empty() && (c.back() == '.' || c.back() == ' ')) {
+    c.pop_back();
+  }
+  if (c.empty()) {  // what "", "." and ".." become
+    return std::nullopt;
   }
   for (const char ch : c) {
     const auto u = static_cast<unsigned char>(ch);
     if (u < 0x20 || u == 0x7F || std::string_view("<>:\"|?*").find(ch) != std::string_view::npos) {
-      return false;
+      return std::nullopt;
     }
   }
-  return !isReservedDeviceName(c);
+  if (isReservedDeviceName(c)) {
+    return std::nullopt;
+  }
+  return c;
 }
 
 std::filesystem::path pathFromUtf8(std::string_view s) {
@@ -64,6 +73,35 @@ std::string collisionKey(const std::filesystem::path& path) {
   key = toLower(key);
 #endif
   return key;
+}
+
+// The relative path `name` stands for, or nullopt when any part of it is unsafe.
+std::optional<std::filesystem::path> safeRelativePath(std::string_view name) {
+  if (name.empty() || name.size() > kMaxNameLength || name.front() == '/' || name.front() == '\\') {
+    return std::nullopt;
+  }
+
+  // Both separators split components on every platform, so a name cannot mean different things per OS.
+  std::filesystem::path relative;
+  size_t start = 0;
+  while (start <= name.size()) {
+    size_t end = name.find_first_of("/\\", start);
+    if (end == std::string_view::npos) {
+      end = name.size();
+    }
+    const auto component = normalizeComponent(name.substr(start, end - start));
+    if (!component) {
+      return std::nullopt;
+    }
+    relative /= pathFromUtf8(*component);
+    start = end + 1;
+  }
+  return relative;
+}
+
+// What the user sees for an exported file: its path below `dir`, not the (possibly different) name in the log.
+std::string exportedName(const std::filesystem::path& dir, const std::filesystem::path& target) {
+  return target.lexically_relative(dir).generic_string();
 }
 
 }  // namespace
@@ -144,7 +182,7 @@ std::vector<std::string> embeddedFileWarnings(const EmbeddedFile& file) {
 
 FileCheck checkEmbeddedFile(const EmbeddedFile& file) {
   FileCheck check;
-  if (!isSafeExportName(file.name)) {
+  if (!safeRelativePath(file.name)) {
     check.details.push_back("unsafe file name");
   }
   if (file.gap_bytes > 0) {
@@ -159,38 +197,6 @@ FileCheck checkEmbeddedFile(const EmbeddedFile& file) {
   }
   check.details.insert(check.details.end(), warnings.begin(), warnings.end());
   return check;
-}
-
-namespace {
-
-// The relative path `name` stands for, or nullopt when any part of it is unsafe.
-std::optional<std::filesystem::path> safeRelativePath(std::string_view name) {
-  if (name.empty() || name.size() > kMaxNameLength || name.front() == '/' || name.front() == '\\') {
-    return std::nullopt;
-  }
-
-  // Both separators split components on every platform, so a name cannot mean different things per OS.
-  std::filesystem::path relative;
-  size_t start = 0;
-  while (start <= name.size()) {
-    size_t end = name.find_first_of("/\\", start);
-    if (end == std::string_view::npos) {
-      end = name.size();
-    }
-    const std::string component(name.substr(start, end - start));
-    if (!isSafeComponent(component)) {
-      return std::nullopt;
-    }
-    relative /= pathFromUtf8(component);
-    start = end + 1;
-  }
-  return relative;
-}
-
-}  // namespace
-
-bool isSafeExportName(std::string_view name) {
-  return safeRelativePath(name).has_value();
 }
 
 std::optional<std::filesystem::path> resolveExportPath(const std::filesystem::path& dir, std::string_view name) {
@@ -227,7 +233,7 @@ std::vector<std::string> findExportConflicts(const std::vector<const EmbeddedFil
     const auto path = resolveExportPath(dir, file->name);
     std::error_code ec;
     if (path && std::filesystem::exists(std::filesystem::symlink_status(*path, ec))) {
-      conflicts.push_back(file->name);
+      conflicts.push_back(exportedName(dir, *path));
     }
   }
   return conflicts;
@@ -296,7 +302,7 @@ ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const st
       continue;
     }
     if (exists && policy == OverwritePolicy::kSkipExisting) {
-      result.skipped.push_back(requested->name);
+      result.skipped.push_back(exportedName(dir, *path));
       continue;
     }
 
@@ -342,7 +348,7 @@ ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const st
     // A file may have appeared since the check above; never replace it when the user chose to skip.
     if (policy == OverwritePolicy::kSkipExisting && std::filesystem::exists(std::filesystem::symlink_status(*path, ec))) {
       std::filesystem::remove(part, ec);
-      result.skipped.push_back(requested->name);
+      result.skipped.push_back(exportedName(dir, *path));
       continue;
     }
     std::filesystem::rename(part, *path, ec);
@@ -354,7 +360,7 @@ ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const st
 
     result.exported++;
     for (const auto& warning : embeddedFileWarnings(*requested)) {
-      result.warnings.push_back(requested->name + ": " + warning);
+      result.warnings.push_back(exportedName(dir, *path) + ": " + warning);
     }
   }
   return result;
