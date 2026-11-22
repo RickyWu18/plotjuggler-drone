@@ -2,17 +2,17 @@
 
 #pragma once
 
-#include "mavlink_transport.h"
-#include <QTcpSocket>
 #include <QString>
+#include <QTcpSocket>
+
+#include "mavlink_transport.h"
 
 // TCP client transport (PlotJuggler connects to SITL/vehicle).
 // Bidirectional: reads incoming MAVLink bytes, writes outbound commands.
-class TcpTransport : public MavlinkTransport
-{
+class TcpTransport : public MavlinkTransport {
   Q_OBJECT
 
-public:
+ public:
   explicit TcpTransport(QString host, quint16 port, QObject* parent = nullptr);
 
   bool open() override;
@@ -21,10 +21,10 @@ public:
   bool canWrite() const override;
   qint64 write(const QByteArray& data) override;
 
-private slots:
+ private slots:
   void onReadyRead();
 
-private:
+ private:
   QString _host;
   quint16 _port;
   QTcpSocket* _socket = nullptr;

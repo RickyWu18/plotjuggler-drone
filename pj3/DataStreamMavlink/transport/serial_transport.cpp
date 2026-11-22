@@ -4,13 +4,9 @@
 
 #include <chrono>
 
-SerialTransport::SerialTransport(SerialConfig cfg, QObject* parent)
-  : MavlinkTransport(parent), _cfg(std::move(cfg))
-{
-}
+SerialTransport::SerialTransport(SerialConfig cfg, QObject* parent) : MavlinkTransport(parent), _cfg(std::move(cfg)) {}
 
-bool SerialTransport::open()
-{
+bool SerialTransport::open() {
   _port = new QSerialPort(this);
   _port->setPortName(_cfg.systemPath);
   _port->setBaudRate(_cfg.baudRate);
@@ -19,10 +15,8 @@ bool SerialTransport::open()
   _port->setStopBits(QSerialPort::OneStop);
   _port->setFlowControl(QSerialPort::NoFlowControl);
 
-  if (!_port->open(QIODevice::ReadWrite))
-  {
-    emit errorOccurred(
-        QString("Cannot open %1: %2").arg(_cfg.displayName, _port->errorString()));
+  if (!_port->open(QIODevice::ReadWrite)) {
+    emit errorOccurred(QString("Cannot open %1: %2").arg(_cfg.displayName, _port->errorString()));
     _port->deleteLater();
     _port = nullptr;
     return false;
@@ -31,32 +25,27 @@ bool SerialTransport::open()
   return true;
 }
 
-void SerialTransport::close()
-{
-  if (_port)
-  {
+void SerialTransport::close() {
+  if (_port) {
     _port->close();
     _port->deleteLater();
     _port = nullptr;
   }
 }
 
-bool SerialTransport::canWrite() const
-{
+bool SerialTransport::canWrite() const {
   return _port && _port->isOpen();
 }
 
-qint64 SerialTransport::write(const QByteArray& data)
-{
+qint64 SerialTransport::write(const QByteArray& data) {
   return _port ? _port->write(data) : -1;
 }
 
-void SerialTransport::onReadyRead()
-{
+void SerialTransport::onReadyRead() {
   using namespace std::chrono;
-  const double ts =
-      duration_cast<duration<double>>(system_clock::now().time_since_epoch()).count();
+  const double ts = duration_cast<duration<double>>(system_clock::now().time_since_epoch()).count();
 
-  while (_port && _port->bytesAvailable() > 0)
+  while (_port && _port->bytesAvailable() > 0) {
     emit bytesReceived(_port->read(4096), ts);
+  }
 }

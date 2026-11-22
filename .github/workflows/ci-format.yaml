@@ -1,0 +1,49 @@
+name: CI Format
+
+# Pull-request check: C/C++ files changed by the PR must match .clang-format (Google style, 120 columns).
+# Whole files are checked, exactly like the pre-commit clang-format hook, so the two never disagree. To fix locally:
+#   pip install clang-format==22.1.0
+#   pre-commit run -a   (or: clang-format -i <file>)
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Same version as the plotjuggler_sdk pre-commit hook.
+      - name: Install clang-format
+        run: pip install "clang-format==22.1.0"
+
+      - name: Check formatting of changed files
+        if: github.event_name == 'pull_request'
+        run: |
+          mapfile -t FILES < <(git diff --name-only --diff-filter=ACMR \
+            "${{ github.event.pull_request.base.sha }}" HEAD -- \
+            '*.c' '*.cc' '*.cpp' '*.h' '*.hpp' ':!3rdparty')
+          if [[ ${#FILES[@]} -eq 0 ]]; then
+            echo "No C/C++ files changed."
+            exit 0
+          fi
+          if clang-format --dry-run -Werror --style=file --fallback-style=none "${FILES[@]}"; then
+            echo "Formatting OK."
+          else
+            echo "::error::Formatting differs from .clang-format. Run: pre-commit run -a"
+            exit 1
+          fi

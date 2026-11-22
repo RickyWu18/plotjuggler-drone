@@ -27,3 +27,5 @@ types out of it. Its tests (`pj_drone_core_test`) run with `./test.sh`.
 `./package.sh` zips built plugins into `dist/` (after `./build.sh`). Manifests need `category` and
 `min_sdk_required` (<= `SDK_VERSION`). `scripts/release_tools.py` is a copy of the pj-official-plugins one;
 registry submission / release tagging scripts from there were NOT ported.
+Extra files (xml, etc.) go in `plugins/<p>/resources/`; they are copied into the ZIP root alongside the binary and
+manifest.

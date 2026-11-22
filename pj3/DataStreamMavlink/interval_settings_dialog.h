@@ -10,41 +10,38 @@
 #include <QVector>
 #include <cstdint>
 
-namespace Ui
-{
+namespace Ui {
 class IntervalSettingsDialog;
 }
 
-class IntervalSettingsDialog : public QDialog
-{
+class IntervalSettingsDialog : public QDialog {
   Q_OBJECT
 
-public:
+ public:
   explicit IntervalSettingsDialog(QWidget* parent = nullptr);
   ~IntervalSettingsDialog() override;
 
   void setConnected(bool connected);
 
-public slots:
+ public slots:
   void onMessageIntervalReceived(uint16_t msg_id, int32_t interval_us);
   void onHistoryList(QVector<uint16_t> ids, QStringList names, QVector<double> rates);
   void onEndpointDiscovered(uint8_t sysid, uint8_t compid);
 
-signals:
+ signals:
   void requestHistory();
   void requestGet(uint8_t target_sysid, uint8_t target_compid, QVector<uint16_t> msg_ids);
-  void requestSet(uint8_t target_sysid, uint8_t target_compid,
-                  QVector<QPair<uint16_t, int32_t>> intervals);
+  void requestSet(uint8_t target_sysid, uint8_t target_compid, QVector<QPair<uint16_t, int32_t>> intervals);
 
-protected:
+ protected:
   void showEvent(QShowEvent* event) override;
 
-private slots:
+ private slots:
   void onAddClicked();
   void onRefreshClicked();
   void onCellDoubleClicked(int row, int col);
 
-private:
+ private:
   void showRateEditDialog(int row);
   void addEntry(uint16_t msg_id, const QString& name, double hz);
   uint16_t rowMsgId(int row) const;

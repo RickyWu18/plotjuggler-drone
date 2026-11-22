@@ -57,8 +57,8 @@ MappedFile& MappedFile::operator=(MappedFile&& other) noexcept {
 
 bool MappedFile::open(const std::filesystem::path& path, std::string* error) {
   close();
-  HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                            FILE_ATTRIBUTE_NORMAL, nullptr);
+  HANDLE file =
+      CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
   if (file == INVALID_HANDLE_VALUE) {
     setError(error, "failed to open file");
     return false;

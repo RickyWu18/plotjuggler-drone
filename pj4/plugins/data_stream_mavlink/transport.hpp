@@ -140,9 +140,8 @@ class TcpTransport : public AsioTransport {
     }
 
     asio::error_code connect_ec = asio::error::would_block;
-    asio::async_connect(socket_, endpoints, [&](asio::error_code result, const asio::ip::tcp::endpoint&) {
-      connect_ec = result;
-    });
+    asio::async_connect(
+        socket_, endpoints, [&](asio::error_code result, const asio::ip::tcp::endpoint&) { connect_ec = result; });
     io_.restart();
     io_.run_for(std::chrono::seconds(5));
     if (connect_ec == asio::error::would_block) {
@@ -186,10 +185,7 @@ class TcpTransport : public AsioTransport {
 class SerialTransport : public AsioTransport {
  public:
   SerialTransport(std::string system_location, std::string display_name, unsigned baud)
-      : system_location_(std::move(system_location)),
-        display_name_(std::move(display_name)),
-        baud_(baud),
-        port_(io_) {}
+      : system_location_(std::move(system_location)), display_name_(std::move(display_name)), baud_(baud), port_(io_) {}
   ~SerialTransport() override {
     stopIo();
   }

@@ -5,18 +5,13 @@
 #include <chrono>
 
 TcpTransport::TcpTransport(QString host, quint16 port, QObject* parent)
-  : MavlinkTransport(parent), _host(std::move(host)), _port(port)
-{
-}
+    : MavlinkTransport(parent), _host(std::move(host)), _port(port) {}
 
-bool TcpTransport::open()
-{
+bool TcpTransport::open() {
   _socket = new QTcpSocket(this);
   _socket->connectToHost(_host, _port);
-  if (!_socket->waitForConnected(5000))
-  {
-    emit errorOccurred(
-        QString("Cannot connect to %1:%2: %3").arg(_host).arg(_port).arg(_socket->errorString()));
+  if (!_socket->waitForConnected(5000)) {
+    emit errorOccurred(QString("Cannot connect to %1:%2: %3").arg(_host).arg(_port).arg(_socket->errorString()));
     _socket->deleteLater();
     _socket = nullptr;
     return false;
@@ -25,32 +20,27 @@ bool TcpTransport::open()
   return true;
 }
 
-void TcpTransport::close()
-{
-  if (_socket)
-  {
+void TcpTransport::close() {
+  if (_socket) {
     _socket->disconnectFromHost();
     _socket->deleteLater();
     _socket = nullptr;
   }
 }
 
-bool TcpTransport::canWrite() const
-{
+bool TcpTransport::canWrite() const {
   return _socket && _socket->state() == QAbstractSocket::ConnectedState;
 }
 
-qint64 TcpTransport::write(const QByteArray& data)
-{
+qint64 TcpTransport::write(const QByteArray& data) {
   return _socket ? _socket->write(data) : -1;
 }
 
-void TcpTransport::onReadyRead()
-{
+void TcpTransport::onReadyRead() {
   using namespace std::chrono;
-  const double ts =
-      duration_cast<duration<double>>(system_clock::now().time_since_epoch()).count();
+  const double ts = duration_cast<duration<double>>(system_clock::now().time_since_epoch()).count();
 
-  while (_socket && _socket->bytesAvailable() > 0)
+  while (_socket && _socket->bytesAvailable() > 0) {
     emit bytesReceived(_socket->read(4096), ts);
+  }
 }

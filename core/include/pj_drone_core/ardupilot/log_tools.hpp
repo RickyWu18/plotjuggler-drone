@@ -65,8 +65,8 @@ FileCheck checkEmbeddedFile(const EmbeddedFile& file);
 std::optional<std::filesystem::path> resolveExportPath(const std::filesystem::path& dir, std::string_view name);
 
 /// Names of `files` whose export target already exists below `dir`.
-std::vector<std::string> findExportConflicts(const std::vector<const EmbeddedFile*>& files,
-                                             const std::filesystem::path& dir);
+std::vector<std::string> findExportConflicts(
+    const std::vector<const EmbeddedFile*>& files, const std::filesystem::path& dir);
 
 enum class OverwritePolicy { kOverwrite, kSkipExisting };
 
@@ -77,9 +77,9 @@ struct ExportFailure {
 
 struct ExportResult {
   size_t exported = 0;
-  std::vector<std::string> skipped;        // target existed and the policy was kSkipExisting
-  std::vector<ExportFailure> failed;       // could not be exported
-  std::vector<std::string> warnings;       // "<name>: <problem>" for exported files with size inconsistencies
+  std::vector<std::string> skipped;   // target existed and the policy was kSkipExisting
+  std::vector<ExportFailure> failed;  // could not be exported
+  std::vector<std::string> warnings;  // "<name>: <problem>" for exported files with size inconsistencies
 };
 
 /// Maps the log at `log_path` again and writes each of `files` (as listed by the earlier scan) below `dir`, keeping
@@ -87,7 +87,8 @@ struct ExportResult {
 /// SHA-256 (a chunk beyond the end of a shortened log counts as a mismatch) before the content is streamed to a
 /// temporary ".part" file, which is only moved into place after the digest is checked once more.
 /// Files whose target paths coincide are all reported as failed instead of overwriting each other.
-ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const std::vector<const EmbeddedFile*>& files,
-                                 const std::filesystem::path& dir, OverwritePolicy policy);
+ExportResult exportEmbeddedFiles(
+    const std::filesystem::path& log_path, const std::vector<const EmbeddedFile*>& files,
+    const std::filesystem::path& dir, OverwritePolicy policy);
 
 }  // namespace pj_drone::ardupilot

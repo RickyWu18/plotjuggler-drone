@@ -8,7 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <pj_plugins/sdk/widget_data.hpp>
 
-#include "ardupilot_info_ui.hpp"  // generated
+#include "ardupilot_info_ui.hpp"   // generated
 #include "ardupilot_manifest.hpp"  // generated
 #include "pj_drone_core/ardupilot/log_tools.hpp"
 #include "pj_drone_core/io/mapped_file.hpp"
@@ -87,8 +87,7 @@ std::string ArdupilotDialog::widget_data() {
     } else if (check.status == ap::FileStatus::kCannotExport) {
       label = "Cannot export";
     }
-    file_rows.push_back(
-        {f.name, std::to_string(f.size) + " bytes", std::to_string(f.covered_bytes) + " bytes", label});
+    file_rows.push_back({f.name, std::to_string(f.size) + " bytes", std::to_string(f.covered_bytes) + " bytes", label});
     std::string details;
     for (const auto& line : check.details) {
       details += (details.empty() ? "" : "\n") + line;

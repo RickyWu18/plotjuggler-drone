@@ -4,9 +4,8 @@
 
 #include <vector>
 
-#include "pj_drone_core/mavlink/decoder.hpp"
-
 #include "mavlink/mavlink_all.hpp"
+#include "pj_drone_core/mavlink/decoder.hpp"
 
 namespace mav = pj_drone::mavlink;
 

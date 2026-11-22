@@ -2,9 +2,6 @@
 
 #pragma once
 
-#include "mavlink_endpoint.h"
-#include "mavlink_transport.h"
-
 #include <QHash>
 #include <QObject>
 #include <QPair>
@@ -12,17 +9,19 @@
 #include <QStringList>
 #include <QVector>
 
+#include "mavlink_endpoint.h"
+#include "mavlink_transport.h"
+
 #define MAVLINK_USE_MESSAGE_INFO
 #include "all/mavlink.h"
 
 // Owns message-rate tracking, endpoint discovery, and outbound MAVLink commands.
 // Decouples IntervalSettingsDialog from DataStreamMavlink: the dialog only
 // sees this controller's signals/slots, not the plugin facade.
-class MavlinkController : public QObject
-{
+class MavlinkController : public QObject {
   Q_OBJECT
 
-public:
+ public:
   explicit MavlinkController(QObject* parent = nullptr);
 
   void setTransport(MavlinkTransport* transport);
@@ -31,21 +30,19 @@ public:
   // Called by DataStreamMavlink for every decoded frame (tracking only — no dataMap access).
   void processDecodedMessage(const mavlink_message_t& msg, double recvTimeSec);
 
-public slots:
+ public slots:
   void onRequestHistory();
   void onRequestGet(uint8_t sysid, uint8_t compid, QVector<uint16_t> msgIds);
-  void onRequestSet(uint8_t sysid, uint8_t compid,
-                    QVector<QPair<uint16_t, int32_t>> intervals);
+  void onRequestSet(uint8_t sysid, uint8_t compid, QVector<QPair<uint16_t, int32_t>> intervals);
 
-signals:
+ signals:
   void messageIntervalReceived(uint16_t msgId, int32_t intervalUs);
   void historyList(QVector<uint16_t> ids, QStringList names, QVector<double> rates);
   void endpointDiscovered(uint8_t sysid, uint8_t compid);
 
-private:
+ private:
   void sendMavlinkMessage(const mavlink_message_t& msg);
-  void sendSetMessageInterval(uint8_t sysid, uint8_t compid,
-                               uint16_t msgId, int32_t intervalUs);
+  void sendSetMessageInterval(uint8_t sysid, uint8_t compid, uint16_t msgId, int32_t intervalUs);
   void sendRequestMessageInterval(uint8_t sysid, uint8_t compid, uint16_t msgId);
 
   MavlinkTransport* _transport = nullptr;

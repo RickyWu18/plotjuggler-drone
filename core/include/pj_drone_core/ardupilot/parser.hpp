@@ -18,8 +18,8 @@ namespace pj_drone::ardupilot {
 /// A decoded numeric sample in its native type. A field whose unit multiplier is not 1 (MULT / FMTU, or the
 /// implicit scaling of the 'c' 'C' 'e' 'E' 'L' format characters) is delivered as double. A string field
 /// ('n' 'N' 'Z') is a view into the log: valid during append() only.
-using SampleValue = std::variant<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double,
-                                 std::string_view>;
+using SampleValue = std::variant<
+    int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double, std::string_view>;
 
 enum class ValueType { kInt8, kUint8, kInt16, kUint16, kInt32, kUint32, kInt64, kUint64, kFloat32, kFloat64, kString };
 
@@ -49,10 +49,10 @@ struct Parameter {
 
 /// One FILE message of an embedded file. The payload stays in the log; only its position is recorded.
 struct FileChunk {
-  uint32_t offset = 0;         // position of the chunk inside the embedded file
-  uint8_t declared_length = 0; // the FILE message's Length field
-  uint8_t length = 0;          // bytes actually stored (min of Length, 64 and the Data field size)
-  size_t log_pos = 0;          // position of the chunk's first byte inside the log
+  uint32_t offset = 0;          // position of the chunk inside the embedded file
+  uint8_t declared_length = 0;  // the FILE message's Length field
+  uint8_t length = 0;           // bytes actually stored (min of Length, 64 and the Data field size)
+  size_t log_pos = 0;           // position of the chunk's first byte inside the log
 };
 
 /// An embedded file as described by the log's FILE messages. The content is not assembled here: it is produced
@@ -61,11 +61,11 @@ struct EmbeddedFile {
   std::string name;      // sanitizeFileName(raw_name): what is displayed and what the export path is built from
   std::string raw_name;  // the name exactly as stored in the log; identifies the file in the digest
   std::vector<FileChunk> chunks;  // log order
-  uint64_t estimated_size = 0;      // max(offset + declared Length) over the chunks
-  uint64_t size = 0;                // end of the assembled content (what streamEmbeddedFile() produces)
-  uint64_t covered_bytes = 0;       // bytes backed by chunk data (size - gap_bytes)
-  uint64_t gap_bytes = 0;           // bytes inside `size` that no chunk provides; a file with gaps is not exportable
-  uint64_t overlap_bytes = 0;       // bytes provided by more than one chunk (the later chunk wins)
+  uint64_t estimated_size = 0;    // max(offset + declared Length) over the chunks
+  uint64_t size = 0;              // end of the assembled content (what streamEmbeddedFile() produces)
+  uint64_t covered_bytes = 0;     // bytes backed by chunk data (size - gap_bytes)
+  uint64_t gap_bytes = 0;         // bytes inside `size` that no chunk provides; a file with gaps is not exportable
+  uint64_t overlap_bytes = 0;     // bytes provided by more than one chunk (the later chunk wins)
   std::string sha256;             // hex digest of the assembled content, taken at scan time
 };
 
@@ -88,8 +88,9 @@ std::vector<FileSegment> layoutEmbeddedFile(EmbeddedFile& file);
 /// Feeds the assembled content of `file` to `write` in order, reading from the log bytes. Returns false when the
 /// file has a gap (missing chunks are never replaced by invented bytes), a chunk lies outside the log, or `write`
 /// returns false.
-bool streamEmbeddedFile(const EmbeddedFile& file, const uint8_t* log, size_t log_length,
-                        const std::function<bool(const uint8_t*, size_t)>& write);
+bool streamEmbeddedFile(
+    const EmbeddedFile& file, const uint8_t* log, size_t log_length,
+    const std::function<bool(const uint8_t*, size_t)>& write);
 
 /// SHA-256 (hex) over the file's FILE records as they appear in the log: `raw_name`, the chunk count, then for
 /// every chunk, in log order, its offset, declared Length, stored length and data. Every field has a fixed or
