@@ -1,7 +1,7 @@
 # pugixml is used by pj_drone::core (it reads the user's MAVLink XML mode files when it finds pugixml); required here
 # so that this plugin is never built with that feature silently switched off.
 find_package(pugixml REQUIRED)
-add_library(data_load_ardupilot SHARED ardupilot_source.cpp ardupilot_dialog.cpp mode_overrides.cpp)
+add_library(data_load_ardupilot SHARED ardupilot_source.cpp ardupilot_dialog.cpp ardupilot_markers.cpp mode_overrides.cpp)
 target_compile_options(data_load_ardupilot PRIVATE ${PJ_WARNING_FLAGS})
 target_link_libraries(data_load_ardupilot PRIVATE
   plotjuggler_sdk::plugin_sdk

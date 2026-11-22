@@ -766,3 +766,81 @@ TEST(ArdupilotParser, OversizedDefinitionLengthResyncsInsteadOfEndingTheParse) {
   Parser parser(log.data(), log.size(), {}, &sink);
   EXPECT_EQ(sink.rows.size(), 2U);
 }
+
+TEST(ArdupilotParser, CollectsModeChangesWithNamesAndReasons) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  msgText(log, "ArduPlane V4.5.0 (abc)");
+  modeRecord(log, 5);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  ASSERT_EQ(parser.modeChanges().size(), 1U);
+  const ModeChange& change = parser.modeChanges()[0];
+  EXPECT_EQ(change.timestamp_ns, 2000000000);
+  EXPECT_EQ(change.mode, 5);
+  EXPECT_EQ(change.reason, 1);
+  EXPECT_EQ(change.name, "FBWA");  // named for the vehicle found by the MSG banner, as in the ModeName field
+}
+
+TEST(ArdupilotParser, CollectsArmChanges) {
+  // ARM: "QBIBB" TimeUS,ArmState,ArmChecks,Forced,Method  (3 + 8 + 1 + 4 + 1 + 1 = 18 bytes)
+  std::vector<uint8_t> log;
+  fmt(log, 140, 18, "ARM", "QBIBB", "TimeUS,ArmState,ArmChecks,Forced,Method");
+  const auto arm = [&log](uint64_t us, uint8_t state, uint32_t checks, uint8_t forced, uint8_t method) {
+    header(log, 140);
+    put(log, us);
+    put(log, state);
+    put(log, checks);
+    put(log, forced);
+    put(log, method);
+  };
+  arm(3000000, 1, 0x1FFU, 0, 2);
+  arm(9000000, 0, 0x1FFU, 1, 7);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  ASSERT_EQ(parser.armChanges().size(), 2U);
+  EXPECT_EQ(parser.armChanges()[0].timestamp_ns, 3000000000);
+  EXPECT_TRUE(parser.armChanges()[0].armed);
+  EXPECT_EQ(parser.armChanges()[0].checks, 0x1FFU);
+  EXPECT_FALSE(parser.armChanges()[0].forced);
+  EXPECT_EQ(parser.armChanges()[0].method, 2);
+  EXPECT_EQ(parser.armChanges()[1].timestamp_ns, 9000000000);
+  EXPECT_FALSE(parser.armChanges()[1].armed);
+  EXPECT_TRUE(parser.armChanges()[1].forced);
+  EXPECT_EQ(parser.armChanges()[1].method, 7);
+}
+
+TEST(ArdupilotParser, MsgWithoutSeverityKeepsNoLevel) {
+  std::vector<uint8_t> log;
+  fmt(log, 132, 75, "MSG", "QZ", "TimeUS,Message");
+  header(log, 132);
+  put<uint64_t>(log, 2000000);
+  putStr(log, "PreArm: Compass not healthy", 64);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  ASSERT_EQ(parser.logMessages().size(), 1U);
+  EXPECT_EQ(parser.logMessages()[0].timestamp_ns, 2000000000);
+  EXPECT_EQ(parser.logMessages()[0].severity, -1);
+}
+
+TEST(ArdupilotParser, MsgSeverityFieldIsReadWhenTheLogHasOne) {
+  // MSG with a level: "QBZ" TimeUS,Severity,Message  (3 + 8 + 1 + 64 = 76 bytes)
+  std::vector<uint8_t> log;
+  fmt(log, 132, 76, "MSG", "QBZ", "TimeUS,Severity,Message");
+  header(log, 132);
+  put<uint64_t>(log, 2000000);
+  put<uint8_t>(log, 3);
+  putStr(log, "Battery failsafe", 64);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  ASSERT_EQ(parser.logMessages().size(), 1U);
+  EXPECT_EQ(parser.logMessages()[0].severity, 3);
+}

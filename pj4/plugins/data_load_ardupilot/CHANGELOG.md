@@ -3,6 +3,17 @@
 ## [Unreleased]
 
 ### Added
+- `MSG`, `MODE` and `ARM` are also published as plot markers, on a new topic `_markers`. Each field of it is a series
+  of NaN (it draws nothing and stays out of the axis range) with the marker set addressed to it; drag a field onto a
+  plot to see its markers there (the curve's "show markers" flag hides them again):
+  - `_markers/message` (from `MSG`): a Label per message (`category=log_message`); when the log has a `Severity` field the message is
+    an Event coloured by that level instead.
+  - `_markers/mode` (from `MODE`): a Region per mode (`category=flight_mode`, label = mode name, `metadata` has the mode number and
+    `Rsn`), ending at the next mode change or at the end of the log. Each mode number has its own colour (a palette of
+    8 without red, which is the arming colour; modes 8 apart share one).
+  - `_markers/arm event` (from `ARM`): an Event per arm/disarm (`category=arm_event`; a forced change is a warning). Repeated rows
+    of the same state are ignored.
+  - `_markers/arm` (from `ARM`): a Region per armed span (`category=arm_region`, label `ARMED`, error colour).
 - `MODE` has a new string series `ModeName` with the flight mode as text (e.g. `LOITER`). The vehicle type comes from
   `VER.BU`, then `VER.FWS`, then the firmware banner in `MSG`. A mode that has no name, an unknown vehicle, or a
   `VER.BU` that disagrees with `VER.FWS` gives `Unknown(<number>)`. The built-in names are generated from the MAVLink

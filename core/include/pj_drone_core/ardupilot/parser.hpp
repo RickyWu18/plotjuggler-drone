@@ -78,6 +78,17 @@ std::string embeddedFileDigest(const EmbeddedFile& file, const uint8_t* log, siz
 struct LogMessage {
   double timestamp = 0.0;  // seconds since boot
   std::string message;
+  int64_t timestamp_ns = 0;
+  int severity = -1;  // MAV_SEVERITY (0 emergency .. 7 debug) when the MSG message carries a Severity field, else -1
+};
+
+/// One ARM row of the log: the arming state after the change.
+struct ArmChange {
+  int64_t timestamp_ns = 0;
+  bool armed = false;   // the log's "ArmState"
+  uint32_t checks = 0;  // "ArmChecks": the arming-check bitmask in force
+  bool forced = false;  // "Forced": armed or disarmed by force, bypassing the checks
+  int method = -1;      // "Method": what triggered the change (AP_Arming::Method); -1 when the log has none
 };
 
 struct MessageStats {
@@ -117,9 +128,22 @@ class Parser {
   const std::vector<LogMessage>& logMessages() const {
     return msg_log_;
   }
+  /// Every MODE row in log order, named for the vehicle the log turned out to come from. Filled when the whole log
+  /// has been read, and only when parsing with a sink (the rows travel through it).
+  const std::vector<ModeChange>& modeChanges() const {
+    return mode_changes_;
+  }
+  /// Every ARM row in log order.
+  const std::vector<ArmChange>& armChanges() const {
+    return arm_changes_;
+  }
   /// The vehicle the log comes from, from what has been parsed so far (VER, then MSG).
   VehicleInfo vehicle() const {
     return vehicle_detector_.info();
+  }
+  /// Timestamp of the last message that carries one, in nanoseconds since boot; 0 when none did.
+  int64_t lastTimestampNs() const {
+    return static_cast<int64_t>(last_timestamp_us_ * 1000U);
   }
   size_t totalSamples() const {
     return total_samples_;
@@ -155,6 +179,7 @@ class Parser {
     int timestamp_idx = -1;
     int instance_idx = -1;
     int mode_idx = -1;  // MODE.Mode: the message gets a derived "ModeName" string field after the log's own fields
+    int mode_reason_idx = -1;           // MODE.Rsn
     std::vector<size_t> delivered_idx;  // indices of the fields that are delivered to the sink
     size_t group = kNoGroup;            // non-instance messages
     std::unordered_map<int, size_t> instance_groups;
@@ -225,6 +250,8 @@ class Parser {
   std::unordered_map<std::string, std::vector<FileChunk>> file_chunks_;
   std::vector<EmbeddedFile> embedded_files_;
   std::vector<LogMessage> msg_log_;
+  std::vector<ModeChange> mode_changes_;
+  std::vector<ArmChange> arm_changes_;
 
   VehicleDetector vehicle_detector_;
 
