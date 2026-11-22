@@ -9,6 +9,7 @@
 
 #include "pj_drone_core/ardupilot/log_tools.hpp"
 #include "pj_drone_core/ardupilot/parser.hpp"
+#include "pj_drone_core/ardupilot/vehicle.hpp"
 
 namespace ardupilot_detail {
 
@@ -21,6 +22,15 @@ class ArdupilotDialog : public PJ::DialogPluginTyped {
   /// Append the field's unit to its name, e.g. "Roll(deg)".
   bool showUnits() const {
     return show_units_;
+  }
+
+  /// The user's mode-name entries (empty when no file is chosen or it could not be read), looked at before the
+  /// built-in tables.
+  const pj_drone::ardupilot::ModeOverrides& modeOverrides() const {
+    return mode_overrides_;
+  }
+  const std::string& modeConfigPath() const {
+    return mode_config_path_;
   }
 
   // --- Dialog protocol ---
@@ -44,11 +54,17 @@ class ArdupilotDialog : public PJ::DialogPluginTyped {
   void clearPendingExport();
   void scanFile();
   void refilterParameters();
+  void setModeConfig(const std::string& path);
+  std::string modeConfigText() const;
 
   std::string filepath_;
   std::string scanned_path_;
   std::string status_;
   bool show_units_ = false;
+
+  std::string mode_config_path_;
+  std::string mode_config_error_;  // why mode_config_path_ was not used; empty when it was
+  pj_drone::ardupilot::ModeOverrides mode_overrides_;
 
   std::vector<pj_drone::ardupilot::Parameter> params_;
   std::vector<pj_drone::ardupilot::EmbeddedFile> files_;

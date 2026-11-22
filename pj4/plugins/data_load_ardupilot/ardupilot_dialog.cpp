@@ -10,6 +10,7 @@
 
 #include "ardupilot_info_ui.hpp"   // generated
 #include "ardupilot_manifest.hpp"  // generated
+#include "mode_overrides.hpp"
 #include "pj_drone_core/ardupilot/log_tools.hpp"
 #include "pj_drone_core/io/mapped_file.hpp"
 
@@ -41,7 +42,8 @@ std::string ArdupilotDialog::ui_content() const {
 }
 
 std::string ArdupilotDialog::saveConfig() const {
-  return nlohmann::json{{"filepath", filepath_}, {"show_units", show_units_}}.dump();
+  return nlohmann::json{{"filepath", filepath_}, {"show_units", show_units_}, {"mode_config", mode_config_path_}}
+      .dump();
 }
 
 bool ArdupilotDialog::loadConfig(std::string_view config_json) {
@@ -50,6 +52,7 @@ bool ArdupilotDialog::loadConfig(std::string_view config_json) {
     return false;
   }
   show_units_ = cfg.value("show_units", false);
+  setModeConfig(cfg.value("mode_config", std::string{}));
   setFilePath(cfg.value("filepath", std::string{}));
   return true;
 }
@@ -131,6 +134,10 @@ std::string ArdupilotDialog::widget_data() {
 
   wd.setChecked("cbShowUnits", show_units_);
 
+  wd.setFilePicker("btnModeConfig", "Choose...", "JSON files (*.json);;All files (*)", "Mode names file");
+  wd.setLabel("labelModeConfig", modeConfigText());
+  wd.setEnabled("btnModeConfigClear", !mode_config_path_.empty());
+
   wd.setLabel("labelStatus", status_);
   return wd.toJson();
 }
@@ -161,6 +168,10 @@ bool ArdupilotDialog::onSelectionChanged(std::string_view name, const std::vecto
 }
 
 bool ArdupilotDialog::onFileSelected(std::string_view name, std::string_view path) {
+  if (name == "btnModeConfig") {
+    setModeConfig(std::string(path));
+    return true;
+  }
   if (name != "btnExport") {
     return false;
   }
@@ -222,6 +233,10 @@ bool ArdupilotDialog::onFolderSelected(std::string_view name, std::string_view p
 }
 
 bool ArdupilotDialog::onClicked(std::string_view name) {
+  if (name == "btnModeConfigClear") {
+    setModeConfig({});
+    return true;
+  }
   if (pending_names_.empty()) {
     return false;
   }
@@ -274,6 +289,30 @@ void ArdupilotDialog::runPendingExport(ap::OverwritePolicy policy) {
       status_ += "\n" + warning;
     }
   }
+}
+
+void ArdupilotDialog::setModeConfig(const std::string& path) {
+  mode_config_path_ = path;
+  mode_config_error_.clear();
+  mode_overrides_.clear();
+  if (path.empty()) {
+    return;
+  }
+  // A file that cannot be used is reported in the dialog and the import falls back to the built-in tables.
+  auto result = loadModeOverrides(pathFromUtf8(path));
+  mode_config_error_ = std::move(result.error);
+  mode_overrides_ = std::move(result.overrides);
+}
+
+std::string ArdupilotDialog::modeConfigText() const {
+  if (mode_config_path_.empty()) {
+    return "Mode names: built-in tables only";
+  }
+  if (!mode_config_error_.empty()) {
+    return "Not used (" + mode_config_error_ + "), built-in tables only:\n" + mode_config_path_;
+  }
+  return "Mode names: " + std::to_string(mode_overrides_.size()) + " entr" +
+         (mode_overrides_.size() == 1 ? "y" : "ies") + " from:\n" + mode_config_path_;
 }
 
 void ArdupilotDialog::refilterParameters() {

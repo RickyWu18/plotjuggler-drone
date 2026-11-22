@@ -13,6 +13,8 @@
 #include <variant>
 #include <vector>
 
+#include "pj_drone_core/ardupilot/vehicle.hpp"
+
 namespace pj_drone::ardupilot {
 
 /// A decoded numeric sample in its native type. A field whose unit multiplier is not 1 (MULT / FMTU, or the
@@ -111,8 +113,9 @@ struct MessageStats {
 struct ParserOptions {
   using ProgressCallback = std::function<bool(size_t pos, size_t total)>;  // return false to cancel
 
-  bool load_files = true;      // index embedded FILE messages (content is only assembled on export)
-  bool hash_instance = false;  // "GPS/#0" instead of "GPS/0"
+  bool load_files = true;        // index embedded FILE messages (content is only assembled on export)
+  bool hash_instance = false;    // "GPS/#0" instead of "GPS/0"
+  ModeOverrides mode_overrides;  // complete mode enums; the first one matching the log replaces the built-in tables
   ProgressCallback progress;
 };
 
@@ -138,6 +141,10 @@ class Parser {
   }
   const std::vector<LogMessage>& logMessages() const {
     return msg_log_;
+  }
+  /// The vehicle the log comes from, from what has been parsed so far (VER, then MSG).
+  const VehicleInfo& vehicle() const {
+    return vehicle_;
   }
   size_t totalSamples() const {
     return total_samples_;
@@ -172,6 +179,7 @@ class Parser {
     size_t payload_size = 0;  // sum of the fields' byte sizes
     int timestamp_idx = -1;
     int instance_idx = -1;
+    int mode_idx = -1;  // MODE.Mode: the message gets a derived "ModeName" string field after the log's own fields
     std::vector<size_t> delivered_idx;  // indices of the fields that are delivered to the sink
     size_t group = kNoGroup;            // non-instance messages
     std::unordered_map<int, size_t> instance_groups;
@@ -207,6 +215,9 @@ class Parser {
   void parseMultPacket(const uint8_t* payload, const MessageDef& def);
   void parseFmtuPacket(const uint8_t* payload, const MessageDef& def);
   void parseFilePacket(const uint8_t* payload, const MessageDef& def);
+  void collectVehicleEvidence(const uint8_t* payload, const MessageDef& def);
+  void refreshVehicle();
+  bool flushDeferredModes();
   void indexEmbeddedFiles();
 
   std::vector<FieldSpec> buildFieldSpecs(const MessageDef& def) const;
@@ -241,6 +252,19 @@ class Parser {
   std::unordered_map<std::string, std::vector<FileChunk>> file_chunks_;
   std::vector<EmbeddedFile> embedded_files_;
   std::vector<LogMessage> msg_log_;
+
+  VehicleDetector vehicle_detector_;
+  VehicleInfo vehicle_;
+
+  // MODE rows are held back until the log has been read (see parseDataPacket); `values` are the log's own fields.
+  struct DeferredMode {
+    size_t group = 0;
+    int64_t timestamp_ns = 0;
+    int mode = 0;
+    std::vector<SampleValue> values;
+  };
+  std::vector<DeferredMode> deferred_modes_;
+  std::string mode_label_;  // backs the string_view handed to the sink for "ModeName"
 };
 
 }  // namespace pj_drone::ardupilot

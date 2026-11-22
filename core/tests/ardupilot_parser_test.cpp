@@ -166,6 +166,256 @@ TEST(ArdupilotParser, StringFieldsAreDelivered) {
   EXPECT_EQ(std::get<std::string_view>(sink.rows[0].values[1]), "Arming checks passed");
 }
 
+namespace {
+
+// MSG (132): "QZ" TimeUS,Message; MODE (133): "QMBB" TimeUS,Mode,ModeNum,Rsn (3 + 8 + 3 = 14 bytes);
+// VER (134): "QBZ" TimeUS,BU,FWS (3 + 8 + 1 + 64 = 76 bytes).
+void defineModeLog(std::vector<uint8_t>& log) {
+  fmt(log, 132, 75, "MSG", "QZ", "TimeUS,Message");
+  fmt(log, 133, 14, "MODE", "QMBB", "TimeUS,Mode,ModeNum,Rsn");
+  fmt(log, 134, 76, "VER", "QBZ", "TimeUS,BU,FWS");
+}
+void msgText(std::vector<uint8_t>& log, const std::string& text) {
+  header(log, 132);
+  put<uint64_t>(log, 1000000);
+  putStr(log, text, 64);
+}
+void verRecord(std::vector<uint8_t>& log, uint8_t bu, const std::string& fws) {
+  header(log, 134);
+  put<uint64_t>(log, 500000);
+  put<uint8_t>(log, bu);
+  putStr(log, fws, 64);
+}
+void modeRecord(std::vector<uint8_t>& log, uint8_t mode) {
+  header(log, 133);
+  put<uint64_t>(log, 2000000);
+  put<uint8_t>(log, mode);
+  put<uint8_t>(log, mode);
+  put<uint8_t>(log, 1);
+}
+
+// Copies each MODE row's ModeName while parsing: the string views die with the log.
+class ModeNameRecorder : public RecordingSink {
+ public:
+  bool append(size_t group, int64_t ts_ns, const SampleValue* values, size_t count) override {
+    if (groups[group].name == "MODE") {
+      names.emplace_back(std::get<std::string_view>(values[count - 1]));
+    }
+    return RecordingSink::append(group, ts_ns, values, count);
+  }
+  std::vector<std::string> names;
+};
+
+}  // namespace
+
+TEST(ArdupilotParser, ModeGetsAModeNameFieldFromTheFirmwareBanner) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  msgText(log, "ArduPlane V4.5.0 (abc)");
+  modeRecord(log, 5);
+
+  ModeNameRecorder sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  ASSERT_EQ(parser.result(), Parser::Result::kOk);
+  EXPECT_EQ(parser.vehicle().type, VehicleType::kPlane);
+  EXPECT_EQ(parser.vehicle().source, VehicleSource::kMsgFirmware);
+  const Group& mode = sink.groups[1];
+  ASSERT_EQ(mode.name, "MODE");
+  ASSERT_EQ(mode.fields.size(), 5U);
+  EXPECT_EQ(mode.fields[4].name, "ModeName");
+  EXPECT_EQ(mode.fields[4].type, ValueType::kString);
+  ASSERT_EQ(sink.names.size(), 1U);
+  EXPECT_EQ(sink.names[0], "FBWA");  // Plane's mode 5, not Copter's LOITER
+}
+
+TEST(ArdupilotParser, ModeNameFollowsVerBuildId) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  verRecord(log, 2, "ArduCopter V4.5.0");
+  modeRecord(log, 5);
+
+  ModeNameRecorder sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  EXPECT_EQ(parser.vehicle().type, VehicleType::kCopter);
+  EXPECT_EQ(parser.vehicle().source, VehicleSource::kVerBuildId);
+  ASSERT_EQ(sink.names.size(), 1U);
+  EXPECT_EQ(sink.names[0], "LOITER");
+}
+
+TEST(ArdupilotParser, ModeNameIsUnknownWithoutAVehicle) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  modeRecord(log, 5);
+
+  ModeNameRecorder sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  EXPECT_EQ(parser.vehicle().type, VehicleType::kUnknown);
+  ASSERT_EQ(sink.names.size(), 1U);
+  EXPECT_EQ(sink.names[0], "Unknown(5)");
+}
+
+TEST(ArdupilotParser, ModeNameIsUnknownWhenVerSourcesDisagree) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  verRecord(log, 3, "ArduCopter V4.5.0");  // BU says Plane, FWS says Copter: neither is picked
+  modeRecord(log, 5);
+
+  ModeNameRecorder sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  EXPECT_TRUE(parser.vehicle().conflict);
+  ASSERT_EQ(sink.names.size(), 1U);
+  EXPECT_EQ(sink.names[0], "Unknown(5)");
+}
+
+TEST(ArdupilotParser, ModeOverrideNamesCustomFirmwareModes) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  verRecord(log, 2, "MyBuild 1.0 [ArduCopter V4.5.0]");
+  modeRecord(log, 30);
+  modeRecord(log, 5);
+  modeRecord(log, 6);
+
+  ParserOptions options;
+  options.mode_overrides.resize(1);
+  options.mode_overrides[0].match = "MyBuild";
+  options.mode_overrides[0].modes = {{30, "FOO"}, {5, "MY_LOITER"}};
+
+  ModeNameRecorder sink;
+  Parser parser(log.data(), log.size(), std::move(options), &sink);
+
+  EXPECT_TRUE(parser.vehicle().custom);
+  ASSERT_EQ(sink.names.size(), 3U);
+  EXPECT_EQ(sink.names[0], "FOO");
+  EXPECT_EQ(sink.names[1], "MY_LOITER");
+  EXPECT_EQ(sink.names[2], "Unknown(6)");  // the entry is the whole enum: no mode is taken from the built-in table
+}
+
+TEST(ArdupilotParser, ModeOverrideResolvesAVehicleConflict) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  verRecord(log, 3, "ArduCopter V4.5.0");
+  modeRecord(log, 5);
+
+  ParserOptions options;
+  options.mode_overrides.resize(1);
+  options.mode_overrides[0].match = "ArduCopter";
+  options.mode_overrides[0].modes = {{5, "LOITER"}};
+
+  ModeNameRecorder sink;
+  Parser parser(log.data(), log.size(), std::move(options), &sink);
+
+  EXPECT_TRUE(parser.vehicle().conflict);
+  ASSERT_EQ(sink.names.size(), 1U);
+  EXPECT_EQ(sink.names[0], "LOITER");
+}
+
+TEST(ArdupilotParser, ModeOverrideThatDoesNotMatchChangesNothing) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  verRecord(log, 3, "ArduCopter V4.5.0");  // conflict
+  modeRecord(log, 5);
+
+  ParserOptions options;
+  options.mode_overrides.resize(1);
+  options.mode_overrides[0].match = "SomethingElse";
+  options.mode_overrides[0].modes = {{5, "LOITER"}};
+
+  ModeNameRecorder sink;
+  Parser parser(log.data(), log.size(), std::move(options), &sink);
+
+  ASSERT_EQ(sink.names.size(), 1U);
+  EXPECT_EQ(sink.names[0], "Unknown(5)");
+}
+
+TEST(ArdupilotParser, ModeBeforeTheVehicleIsKnownIsNamedWithTheFinalVehicle) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  modeRecord(log, 5);  // read before anything says what the vehicle is
+  verRecord(log, 2, "ArduCopter V4.5.0");
+  modeRecord(log, 5);
+
+  ModeNameRecorder sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  ASSERT_EQ(sink.names.size(), 2U);
+  EXPECT_EQ(sink.names[0], "LOITER");
+  EXPECT_EQ(sink.names[1], "LOITER");
+}
+
+TEST(ArdupilotParser, ModeOverrideAppliesToModesReadBeforeTheFirmwareIsKnown) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  modeRecord(log, 30);
+  verRecord(log, 2, "MyBuild [ArduCopter V4.5.0]");
+  modeRecord(log, 30);
+
+  ParserOptions options;
+  options.mode_overrides.resize(1);
+  options.mode_overrides[0].match = "MyBuild";
+  options.mode_overrides[0].modes = {{30, "FOO"}};
+
+  ModeNameRecorder sink;
+  Parser parser(log.data(), log.size(), std::move(options), &sink);
+
+  ASSERT_EQ(sink.names.size(), 2U);
+  EXPECT_EQ(sink.names[0], "FOO");
+  EXPECT_EQ(sink.names[1], "FOO");
+}
+
+TEST(ArdupilotParser, TheFirstVerDecidesTheVehicle) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  verRecord(log, 2, "ArduCopter V4.5.0");
+  modeRecord(log, 5);
+  verRecord(log, 3, "ArduPlane V4.5.0");  // a second boot joined to the log
+  modeRecord(log, 5);
+
+  ModeNameRecorder sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  EXPECT_EQ(parser.vehicle().type, VehicleType::kCopter);
+  ASSERT_EQ(sink.names.size(), 2U);
+  EXPECT_EQ(sink.names[0], "LOITER");
+  EXPECT_EQ(sink.names[1], "LOITER");
+}
+
+TEST(ArdupilotParser, ModeRowsReadBeforeACancelAreStillDelivered) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  verRecord(log, 2, "ArduCopter V4.5.0");
+  modeRecord(log, 5);
+  for (int i = 0; i < 50; i++) {
+    msgText(log, "padding");
+  }
+
+  ParserOptions options;
+  options.progress = [](size_t pos, size_t total) { return pos * 2 < total; };  // cancel halfway
+
+  ModeNameRecorder sink;
+  Parser parser(log.data(), log.size(), std::move(options), &sink);
+
+  EXPECT_EQ(parser.result(), Parser::Result::kCancelled);
+  ASSERT_EQ(sink.names.size(), 1U);
+  EXPECT_EQ(sink.names[0], "LOITER");
+}
+
+TEST(ArdupilotParser, ModeNameIsUnknownForAModeTheVehicleHasNoNameFor) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  verRecord(log, 2, "ArduCopter V4.5.0");
+  modeRecord(log, 8);
+
+  ModeNameRecorder sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  ASSERT_EQ(sink.names.size(), 1U);
+  EXPECT_EQ(sink.names[0], "Unknown(8)");
+}
+
 TEST(ArdupilotParser, StringValuesCopiedInAppendOutliveTheLogBuffer) {
   std::vector<uint8_t> log;
   fmt(log, 132, 75, "MSG", "QZ", "TimeUS,Message");

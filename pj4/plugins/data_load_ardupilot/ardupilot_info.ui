@@ -25,6 +25,37 @@
         </property>
        </widget>
       </item>
+      <item>
+       <layout class="QHBoxLayout" name="modeConfigLayout">
+        <item>
+         <widget class="QLabel" name="labelModeConfig">
+          <property name="text">
+           <string>Mode names: built-in tables only</string>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnModeConfig">
+          <property name="text">
+           <string>Choose...</string>
+          </property>
+          <property name="toolTip">
+           <string>JSON file with a complete mode enum for custom firmware or logs whose vehicle type is unclear; a log it matches is named by this file only, not by the built-in tables</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnModeConfigClear">
+          <property name="text">
+           <string>Clear</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
      </layout>
     </widget>
    </item>

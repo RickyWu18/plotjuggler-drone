@@ -1,4 +1,4 @@
-add_library(data_load_ardupilot SHARED ardupilot_source.cpp ardupilot_dialog.cpp)
+add_library(data_load_ardupilot SHARED ardupilot_source.cpp ardupilot_dialog.cpp mode_overrides.cpp)
 target_compile_options(data_load_ardupilot PRIVATE ${PJ_WARNING_FLAGS})
 target_link_libraries(data_load_ardupilot PRIVATE
   plotjuggler_sdk::plugin_sdk
