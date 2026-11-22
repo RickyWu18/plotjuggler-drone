@@ -62,7 +62,8 @@ void Parser::parse() {
   const bool completed = parseSinglePass();
   // What was read before a cancel is kept, so the buffered MODE rows are written then too; after a sink error the
   // sink has refused data and gets no more.
-  if (result_ != Result::kSinkError && sink_ != nullptr && !flushDeferredModes()) {
+  if (result_ != Result::kSinkError && sink_ != nullptr &&
+      !deferred_modes_.flush(*sink_, vehicle(), options_.mode_overrides, total_samples_)) {
     result_ = Result::kSinkError;
   }
   if (!completed || result_ == Result::kSinkError) {
@@ -588,28 +589,12 @@ bool Parser::parseDataPacket(const uint8_t* payload, MessageDef& def) {
   // one log must not be named by two different rule sets.
   if (def.mode_idx >= 0) {
     const int mode = payload[def.fields[static_cast<size_t>(def.mode_idx)].offset];
-    deferred_modes_.push_back(
-        {group, timestamp_ns, mode, std::vector<SampleValue>(values.begin(), values.begin() + count)});
+    deferred_modes_.add(group, timestamp_ns, mode, values.data(), count);
     return true;
   }
 
   total_samples_ += count;
   return sink_->append(group, timestamp_ns, values.data(), count);
-}
-
-bool Parser::flushDeferredModes() {
-  const VehicleInfo vehicle = vehicle_detector_.info();
-  const ModeOverride* entry = findModeOverride(options_.mode_overrides, vehicle);
-  for (DeferredMode& row : deferred_modes_) {
-    mode_label_ = modeLabel(vehicle, entry, row.mode);
-    row.values.emplace_back(std::string_view(mode_label_));
-    total_samples_ += row.values.size();
-    if (!sink_->append(row.group, row.timestamp_ns, row.values.data(), row.values.size())) {
-      return false;
-    }
-  }
-  deferred_modes_.clear();
-  return true;
 }
 
 void Parser::collectVehicleEvidence(const uint8_t* payload, const MessageDef& def) {

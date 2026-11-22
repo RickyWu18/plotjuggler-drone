@@ -27,6 +27,7 @@ add_custom_command(
 
 add_library(pj_drone_core STATIC
   src/ardupilot/parser.cpp
+  src/ardupilot/deferred_modes.cpp
   src/ardupilot/log_tools.cpp
   src/ardupilot/vehicle.cpp
   ${PJ_MODE_TABLES_INC}
