@@ -45,8 +45,9 @@ std::string_view modeName(VehicleType type, int mode);
 /// custom firmware and for logs whose vehicle sources disagree. A log is named by exactly one table: this one as a
 /// whole or the built-in one as a whole, never a mix, so a mode this table does not list stays unnamed.
 struct ModeOverride {
-  std::string match;                 // a case-insensitive substring of VehicleInfo::firmware; empty matches any log
-  std::map<int, std::string> modes;  // mode number -> name: the whole enum
+  std::optional<VehicleType> vehicle;  // when set, only logs of this vehicle match (kHeli counts as kCopter)
+  std::string match;                   // a case-insensitive substring of VehicleInfo::firmware; empty matches any log
+  std::map<int, std::string> modes;    // mode number -> name: the whole enum
 };
 using ModeOverrides = std::vector<ModeOverride>;
 

@@ -16,6 +16,16 @@ A log is named by **one mode enum, taken as a whole**: either an entry of the us
 
 ## File format
 
+The file is either the JSON format below or a MAVLink `ardupilotmega.xml`; the format is picked from the content (text starting with `<` is XML).
+
+### ardupilotmega.xml
+
+Choose any version of the dialect file (for example the one in `c_library_v2/message_definitions/`, or a newer one) and no rebuild is needed. The `COPTER_MODE`, `PLANE_MODE`, `ROVER_MODE`, `SUB_MODE` and `TRACKER_MODE` enums are read; each becomes one entry that applies to logs of that vehicle (Heli uses `COPTER_MODE`). The name of a mode is the entry's `<description>`, else its enum name without the prefix, the same rule as the built-in tables.
+
+An enum the file lacks is skipped, and that vehicle keeps the built-in names. A file with none of the five enums, a duplicate value or a value outside 0-255 is rejected as a whole. The built-in tables are used when the file is rejected. Unlike a JSON entry, an XML entry does not look at the firmware string; the vehicle decides.
+
+### JSON
+
 ```json
 {
   "version": 1,

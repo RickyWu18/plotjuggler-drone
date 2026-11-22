@@ -9,6 +9,7 @@ _SDK_VERSION = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "SD
 # Per-plugin third-party deps. build.sh <plugin>... exports PJ_PLUGINS so only those are fetched;
 # unset/empty means every plugin. Add new plugin deps here as plugins are ported.
 _PLUGIN_DEPS = {
+    "data_load_ardupilot": ["pugixml/1.14"],
     "data_stream_mavlink": ["asio/1.28.2"],
 }
 

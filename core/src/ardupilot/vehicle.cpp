@@ -141,6 +141,9 @@ namespace {
 
 // ASCII case-insensitive substring test; an empty needle is found everywhere.
 bool containsIgnoreCase(std::string_view haystack, std::string_view needle) {
+  if (needle.empty()) {
+    return true;
+  }
   const auto same = [](char a, char b) {
     return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
   };
@@ -150,8 +153,13 @@ bool containsIgnoreCase(std::string_view haystack, std::string_view needle) {
 }  // namespace
 
 int findModeOverride(const ModeOverrides& overrides, const VehicleInfo& info) {
+  const auto modeFamily = [](VehicleType type) { return type == VehicleType::kHeli ? VehicleType::kCopter : type; };
   for (size_t i = 0; i < overrides.size(); i++) {
-    if (containsIgnoreCase(info.firmware, overrides[i].match)) {
+    const auto& entry = overrides[i];
+    if (entry.vehicle && modeFamily(*entry.vehicle) != modeFamily(info.type)) {
+      continue;
+    }
+    if (containsIgnoreCase(info.firmware, entry.match)) {
       return static_cast<int>(i);
     }
   }

@@ -134,7 +134,9 @@ std::string ArdupilotDialog::widget_data() {
 
   wd.setChecked("cbShowUnits", show_units_);
 
-  wd.setFilePicker("btnModeConfig", "Choose...", "JSON files (*.json);;All files (*)", "Mode names file");
+  wd.setFilePicker(
+      "btnModeConfig", "Choose...",
+      "Mode names (*.json *.xml);;JSON files (*.json);;MAVLink XML (*.xml);;All files (*)", "Mode names file");
   wd.setLabel("labelModeConfig", modeConfigText());
   wd.setLabel("labelModeFile", mode_config_path_.empty() ? std::string("No file selected") : mode_config_path_);
   wd.setEnabled("btnModeConfigClear", !mode_config_path_.empty());

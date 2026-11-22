@@ -84,6 +84,18 @@ TEST(ModeOverride, MatchIgnoresCase) {
   EXPECT_EQ(findModeOverride(overrides, info), -1);
 }
 
+TEST(ModeOverride, VehicleRestrictsTheEntryAndHeliCountsAsCopter) {
+  VehicleInfo info;  // detected from VER.BU only: there is no firmware string
+  info.type = VehicleType::kHeli;
+  ModeOverrides overrides(2);
+  overrides[0].vehicle = VehicleType::kPlane;
+  overrides[1].vehicle = VehicleType::kCopter;
+  EXPECT_EQ(findModeOverride(overrides, info), 1);
+
+  info.type = VehicleType::kRover;
+  EXPECT_EQ(findModeOverride(overrides, info), -1);
+}
+
 TEST(ModeOverride, TheEntryIsTheWholeEnumAndNeverMixedWithTheBuiltInTable) {
   const VehicleInfo info = customCopter();  // Copter, custom
   ModeOverride entry;
