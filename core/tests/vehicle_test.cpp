@@ -36,17 +36,39 @@ TEST(Vehicle, CustomFirmwareUsesTheBracketedOriginalName) {
   EXPECT_FALSE(custom);
 }
 
-TEST(Vehicle, ModeNames) {
-  EXPECT_EQ(modeName(VehicleType::kCopter, 5), "LOITER");
-  EXPECT_EQ(modeName(VehicleType::kHeli, 5), "LOITER");
-  EXPECT_EQ(modeName(VehicleType::kPlane, 5), "FBWA");  // the XML <description>, not the enum name
-  EXPECT_EQ(modeName(VehicleType::kCopter, 2), "ALT HOLD");
-  EXPECT_EQ(modeName(VehicleType::kRover, 4), "HOLD");
-  EXPECT_EQ(modeName(VehicleType::kSub, 19), "MANUAL");
-  EXPECT_EQ(modeName(VehicleType::kTracker, 10), "AUTO");
-  EXPECT_EQ(modeName(VehicleType::kCopter, 8), "");  // hole in the table
-  EXPECT_EQ(modeName(VehicleType::kBlimp, 0), "");
-  EXPECT_EQ(modeName(VehicleType::kUnknown, 0), "");
+namespace {
+
+// The built-in name of `mode` for a log of `type` (no user entries, no firmware string).
+std::string builtinLabel(VehicleType type, int mode) {
+  VehicleInfo info;
+  info.type = type;
+  return modeLabel(resolveModeOverride({}, info), mode);
+}
+
+}  // namespace
+
+TEST(Vehicle, BuiltInModeNames) {
+  EXPECT_EQ(builtinLabel(VehicleType::kCopter, 5), "LOITER");
+  EXPECT_EQ(builtinLabel(VehicleType::kHeli, 5), "LOITER");
+  EXPECT_EQ(builtinLabel(VehicleType::kPlane, 5), "FBWA");  // the XML <description>, not the enum name
+  EXPECT_EQ(builtinLabel(VehicleType::kCopter, 2), "ALT HOLD");
+  EXPECT_EQ(builtinLabel(VehicleType::kRover, 4), "HOLD");
+  EXPECT_EQ(builtinLabel(VehicleType::kSub, 19), "MANUAL");
+  EXPECT_EQ(builtinLabel(VehicleType::kTracker, 10), "AUTO");
+  EXPECT_EQ(builtinLabel(VehicleType::kCopter, 8), "Unknown(8)");  // hole in the table
+  EXPECT_EQ(builtinLabel(VehicleType::kBlimp, 0), "Unknown(0)");
+  EXPECT_EQ(builtinLabel(VehicleType::kPeriph, 0), "Unknown(0)");
+  EXPECT_EQ(builtinLabel(VehicleType::kUnknown, 0), "Unknown(0)");
+}
+
+TEST(Vehicle, BuiltInTablesAreOneEntryPerVehicle) {
+  const ModeOverrides& tables = builtinModeOverrides();
+  ASSERT_EQ(tables.size(), 5u);
+  for (const ModeOverride& entry : tables) {
+    EXPECT_TRUE(entry.vehicle.has_value());
+    EXPECT_TRUE(entry.match.empty());
+    EXPECT_FALSE(entry.modes.empty());
+  }
 }
 
 namespace {
@@ -102,10 +124,15 @@ TEST(ModeOverride, TheEntryIsTheWholeEnumAndNeverMixedWithTheBuiltInTable) {
   entry.modes[30] = "FOO";
   entry.modes[5] = "MY_LOITER";
 
-  EXPECT_EQ(modeLabel(info, &entry, 30), "FOO");
-  EXPECT_EQ(modeLabel(info, &entry, 5), "MY_LOITER");   // replaces the built-in LOITER
-  EXPECT_EQ(modeLabel(info, &entry, 6), "Unknown(6)");  // built-in Copter has RTL here, but the entry does not
-  EXPECT_EQ(modeLabel(info, nullptr, 6), "RTL");        // without an entry the built-in table is used as a whole
+  const ModeOverrides user = {entry};
+  const ModeOverride* resolved = resolveModeOverride(user, info);
+  ASSERT_EQ(resolved, &user[0]);
+  EXPECT_EQ(modeLabel(resolved, 30), "FOO");
+  EXPECT_EQ(modeLabel(resolved, 5), "MY_LOITER");   // replaces the built-in LOITER
+  EXPECT_EQ(modeLabel(resolved, 6), "Unknown(6)");  // built-in Copter has RTL here, but the entry does not
+
+  // Without a user entry the built-in table of the vehicle is used as a whole.
+  EXPECT_EQ(modeLabel(resolveModeOverride({}, info), 6), "RTL");
 }
 
 TEST(ModeOverride, ResolvesAVehicleConflict) {
@@ -114,12 +141,14 @@ TEST(ModeOverride, ResolvesAVehicleConflict) {
   d.setVerFirmware("ArduCopter V4.5.0");
   const VehicleInfo info = d.info();
   ASSERT_TRUE(info.conflict);
-  EXPECT_EQ(modeLabel(info, nullptr, 5), "Unknown(5)");
+  EXPECT_EQ(resolveModeOverride({}, info), nullptr);  // neither source is picked, so no built-in table applies
+  EXPECT_EQ(modeLabel(nullptr, 5), "Unknown(5)");
 
   ModeOverride entry;
   entry.match = "ArduCopter";
   entry.modes = {{5, "LOITER"}};
-  EXPECT_EQ(modeLabel(info, &entry, 5), "LOITER");
+  const ModeOverrides user = {entry};
+  EXPECT_EQ(modeLabel(resolveModeOverride(user, info), 5), "LOITER");
 }
 
 TEST(VehicleDetector, BuildIdWinsWhenFirmwareAgrees) {

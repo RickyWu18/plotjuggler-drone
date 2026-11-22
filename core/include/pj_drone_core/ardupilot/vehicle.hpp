@@ -37,13 +37,10 @@ VehicleType vehicleFromFirmwareString(std::string_view firmware, bool* custom = 
 
 const char* vehicleName(VehicleType type);
 
-/// Flight mode name for the vehicle's custom-mode number (the MODE message's Mode field), e.g. (kCopter, 5) ->
-/// "LOITER". Empty when the vehicle is unknown or has no name for `mode`.
-std::string_view modeName(VehicleType type, int mode);
-
-/// A complete, user supplied mode enum that replaces the built-in tables for the logs it matches. It is meant for
-/// custom firmware and for logs whose vehicle sources disagree. A log is named by exactly one table: this one as a
-/// whole or the built-in one as a whole, never a mix, so a mode this table does not list stays unnamed.
+/// A complete mode enum: the names of the custom-mode numbers (the MODE message's Mode field) of the logs it matches.
+/// The built-in tables are such entries, one per vehicle; a user supplied entry (for custom firmware, or for logs whose
+/// vehicle sources disagree) is looked at before them. A log is named by exactly one entry as a whole, never a mix, so
+/// a mode the entry does not list stays unnamed.
 struct ModeOverride {
   std::optional<VehicleType> vehicle;  // when set, only logs of this vehicle match (kHeli counts as kCopter)
   std::string match;                   // a case-insensitive substring of VehicleInfo::firmware; empty matches any log
@@ -54,9 +51,16 @@ using ModeOverrides = std::vector<ModeOverride>;
 /// The first entry of `overrides` that applies to `info`; null when none does. The pointer points into `overrides`.
 const ModeOverride* findModeOverride(const ModeOverrides& overrides, const VehicleInfo& info);
 
-/// The text shown for `mode`: the name in `override_entry` when there is one, otherwise the built-in name for the
-/// detected vehicle; "Unknown(<mode>)" when the table in use has no such mode. `override_entry` may be null.
-std::string modeLabel(const VehicleInfo& info, const ModeOverride* override_entry, int mode);
+/// The built-in tables: one entry per vehicle that has a mode enum in the MAVLink dialect (Copter, Plane, Rover, Sub,
+/// Tracker; Heli uses Copter's). Blimp and AP_Periph have none.
+const ModeOverrides& builtinModeOverrides();
+
+/// The entry that names the log `info`: the first of `user` that applies, else the built-in one of the vehicle; null
+/// when there is none (vehicle unknown or in conflict, or without a table). Points into `user` or the built-in tables.
+const ModeOverride* resolveModeOverride(const ModeOverrides& user, const VehicleInfo& info);
+
+/// The text shown for `mode`: its name in `entry`, or "Unknown(<mode>)" when `entry` is null or lacks it.
+std::string modeLabel(const ModeOverride* entry, int mode);
 
 /// Collects the vehicle evidence of a log (VER.BU, VER.FWS, MSG text) and applies the rules of
 /// docs/ardupilot/log_vehicle_type.md section 6.

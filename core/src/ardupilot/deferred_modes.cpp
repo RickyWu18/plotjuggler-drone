@@ -13,11 +13,11 @@ void DeferredModes::add(size_t group, int64_t timestamp_ns, int mode, const Samp
 
 bool DeferredModes::flush(
     SampleSink& sink, const VehicleInfo& vehicle, const ModeOverrides& overrides, size_t& samples) {
-  const ModeOverride* entry = findModeOverride(overrides, vehicle);
+  const ModeOverride* entry = resolveModeOverride(overrides, vehicle);
   std::string label;  // backs the string_view handed to the sink
   bool accepted = true;
   for (Row& row : rows_) {
-    label = modeLabel(vehicle, entry, row.mode);
+    label = modeLabel(entry, row.mode);
     row.values.emplace_back(std::string_view(label));
     samples += row.values.size();
     if (!sink.append(row.group, row.timestamp_ns, row.values.data(), row.values.size())) {

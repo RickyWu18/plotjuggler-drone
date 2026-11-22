@@ -7,7 +7,7 @@ The `MODE` message gets an extra string series, `ModeName`, next to the log's ow
 A log is named by **one mode enum, taken as a whole**: either an entry of the user's file or the built-in table of the detected vehicle. The two are never mixed; a mode the chosen enum does not list is `Unknown(<number>)`, it is not looked up in the other one.
 
 1. **The user's mode-names file**, when one is chosen in the dialog. The first entry whose `match` is found in the log's firmware string is the enum (an entry without `match` applies to every log). Each entry has to be a complete enum, because nothing is filled in from the built-in tables.
-2. **Otherwise the built-in table** of the vehicle the log reports (see [log_vehicle_type.md](log_vehicle_type.md)). The tables are generated at build time from `3rdparty/c_library_v2/message_definitions/ardupilotmega.xml` (COPTER, PLANE, ROVER, SUB and TRACKER mode enums; the name is the entry's `<description>`) by `core/scripts/gen_mode_tables.py`. Heli uses the Copter table. Blimp and AP_Periph have no table.
+2. **Otherwise the built-in table** of the vehicle the log reports (see [log_vehicle_type.md](log_vehicle_type.md)). The tables are generated at build time from `3rdparty/c_library_v2/message_definitions/ardupilotmega.xml` (COPTER, PLANE, ROVER, SUB and TRACKER mode enums; the name is the entry's `<description>`) by `core/scripts/gen_mode_tables.py`. They have the same form as an entry of the user's file (one per vehicle, no `match`), so the two are handled by the same code. Heli uses the Copter table. Blimp and AP_Periph have no table.
 3. `Unknown(<number>)` when the enum in use has no such mode, the vehicle is unknown, or `VER.BU` and `VER.FWS` name different vehicles and no entry of the user's file matches.
 
 ## When the names are decided
@@ -21,6 +21,8 @@ The file is either the JSON format below or a MAVLink `ardupilotmega.xml`; the f
 ### ardupilotmega.xml
 
 Choose any version of the dialect file (for example the one in `c_library_v2/message_definitions/`, or a newer one) and no rebuild is needed. The `COPTER_MODE`, `PLANE_MODE`, `ROVER_MODE`, `SUB_MODE` and `TRACKER_MODE` enums are read; each becomes one entry that applies to logs of that vehicle (Heli uses `COPTER_MODE`). The name of a mode is the entry's `<description>`, else its enum name without the prefix, the same rule as the built-in tables.
+
+Reading XML needs pugixml. PJ4 builds have it; a build without it (the PJ3 plugins) has the built-in tables and the JSON format, and a chosen XML file is rejected with "this build cannot read MAVLink XML". The run-time reader (`core/src/ardupilot/mode_xml.cpp`) and the build-time generator apply the same naming rule; `core/tests/mode_xml_test.cpp` checks that they agree on the dialect file in `3rdparty`.
 
 An enum the file lacks is skipped, and that vehicle keeps the built-in names. A file with none of the five enums, a duplicate value or a value outside 0-255 is rejected as a whole. The built-in tables are used when the file is rejected. Unlike a JSON entry, an XML entry does not look at the firmware string; the vehicle decides.
 

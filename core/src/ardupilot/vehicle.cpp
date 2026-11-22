@@ -10,25 +10,6 @@ namespace pj_drone::ardupilot {
 
 namespace {
 
-struct ModeEntry {
-  int value;
-  const char* name;
-};
-
-// kCopterModes, kPlaneModes, kRoverModes, kSubModes and kTrackerModes: the <VEHICLE>_MODE_<NAME> entries of the MAVLink
-// ardupilotmega.xml dialect, generated at build time by core/scripts/gen_mode_tables.py (see core/CMakeLists.txt).
-#include "pj_drone_mode_tables.inc"
-
-template <size_t N>
-std::string_view lookup(const ModeEntry (&table)[N], int mode) {
-  for (const ModeEntry& entry : table) {
-    if (entry.value == mode) {
-      return entry.name;
-    }
-  }
-  return {};
-}
-
 // Heli is a Copter with the same firmware name; for comparing the two sources they are one family.
 VehicleType family(VehicleType type) {
   return type == VehicleType::kHeli ? VehicleType::kCopter : type;
@@ -116,25 +97,13 @@ const char* vehicleName(VehicleType type) {
   return "Unknown";
 }
 
-std::string_view modeName(VehicleType type, int mode) {
-  switch (type) {
-    case VehicleType::kCopter:
-    case VehicleType::kHeli:
-      return lookup(kCopterModes, mode);
-    case VehicleType::kPlane:
-      return lookup(kPlaneModes, mode);
-    case VehicleType::kRover:
-      return lookup(kRoverModes, mode);
-    case VehicleType::kSub:
-      return lookup(kSubModes, mode);
-    case VehicleType::kTracker:
-      return lookup(kTrackerModes, mode);
-    case VehicleType::kBlimp:  // the MAVLink dialect has no Blimp mode table
-    case VehicleType::kPeriph:
-    case VehicleType::kUnknown:
-      break;
-  }
-  return {};
+const ModeOverrides& builtinModeOverrides() {
+  // One entry per vehicle with a mode enum in the MAVLink ardupilotmega.xml dialect (Blimp and AP_Periph have none),
+  // generated at build time by core/scripts/gen_mode_tables.py (see core/CMakeLists.txt).
+  static const ModeOverrides kTables = {
+#include "pj_drone_mode_tables.inc"
+  };
+  return kTables;
 }
 
 namespace {
@@ -164,14 +133,20 @@ const ModeOverride* findModeOverride(const ModeOverrides& overrides, const Vehic
   return nullptr;
 }
 
-std::string modeLabel(const VehicleInfo& info, const ModeOverride* override_entry, int mode) {
-  // One table per log: the user's when an entry applies (a mode it lacks is unknown, not looked up elsewhere).
-  if (override_entry != nullptr) {
-    const auto named = override_entry->modes.find(mode);
-    return named != override_entry->modes.end() ? named->second : "Unknown(" + std::to_string(mode) + ")";
+const ModeOverride* resolveModeOverride(const ModeOverrides& user, const VehicleInfo& info) {
+  const ModeOverride* entry = findModeOverride(user, info);
+  return entry != nullptr ? entry : findModeOverride(builtinModeOverrides(), info);
+}
+
+std::string modeLabel(const ModeOverride* entry, int mode) {
+  // One table per log: a mode the table lacks is unknown, not looked up in another one.
+  if (entry != nullptr) {
+    const auto named = entry->modes.find(mode);
+    if (named != entry->modes.end()) {
+      return named->second;
+    }
   }
-  const std::string_view name = modeName(info.type, mode);
-  return name.empty() ? "Unknown(" + std::to_string(mode) + ")" : std::string(name);
+  return "Unknown(" + std::to_string(mode) + ")";
 }
 
 void VehicleDetector::setBuildId(int build_id) {
