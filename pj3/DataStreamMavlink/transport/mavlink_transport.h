@@ -8,14 +8,11 @@
 // Abstract I/O interface for MAVLink transports (UDP, serial, …).
 // Each concrete implementation owns its socket/port and emits bytesReceived
 // with a wall-clock receive timestamp (seconds since epoch).
-class MavlinkTransport : public QObject
-{
+class MavlinkTransport : public QObject {
   Q_OBJECT
 
-public:
-  explicit MavlinkTransport(QObject* parent = nullptr) : QObject(parent)
-  {
-  }
+ public:
+  explicit MavlinkTransport(QObject* parent = nullptr) : QObject(parent) {}
   ~MavlinkTransport() override = default;
 
   virtual bool open() = 0;
@@ -24,7 +21,7 @@ public:
   virtual bool canWrite() const = 0;
   virtual qint64 write(const QByteArray& data) = 0;
 
-signals:
+ signals:
   void bytesReceived(QByteArray data, double recvTimeSec);
   void errorOccurred(QString message);
 };

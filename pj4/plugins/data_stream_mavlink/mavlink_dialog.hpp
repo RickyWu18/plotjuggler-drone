@@ -44,8 +44,9 @@ struct ConnectionConfig {
   }
 
   std::string toJson() const {
-    return nlohmann::json{{"transport", static_cast<int>(mode)}, {"udp_port", udp_port}, {"tcp_host", tcp_host},
-                          {"tcp_port", tcp_port},                {"serial_port", serial_port}, {"baud", baud}}
+    return nlohmann::json{
+        {"transport", static_cast<int>(mode)}, {"udp_port", udp_port}, {"tcp_host", tcp_host}, {"tcp_port", tcp_port},
+        {"serial_port", serial_port},          {"baud", baud}}
         .dump();
   }
 };

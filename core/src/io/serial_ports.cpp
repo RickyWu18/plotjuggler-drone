@@ -61,7 +61,8 @@ std::vector<SerialPortInfo> availableSerialPorts() {
   }
 #endif
 
-  std::sort(ports.begin(), ports.end(), [](const SerialPortInfo& a, const SerialPortInfo& b) { return a.name < b.name; });
+  std::sort(
+      ports.begin(), ports.end(), [](const SerialPortInfo& a, const SerialPortInfo& b) { return a.name < b.name; });
   return ports;
 }
 

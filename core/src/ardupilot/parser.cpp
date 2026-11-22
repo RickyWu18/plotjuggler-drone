@@ -89,8 +89,9 @@ std::vector<FieldSpec> Parser::buildFieldSpecs(const MessageDef& def) const {
 void Parser::finalizeDef(MessageDef& def) {
   def.finalized = true;
 
-  const bool is_special = (def.msg_type == unit_msg_type_ || def.msg_type == mult_msg_type_ ||
-                           def.msg_type == fmtu_msg_type_ || def.msg_type == file_msg_type_);
+  const bool is_special =
+      (def.msg_type == unit_msg_type_ || def.msg_type == mult_msg_type_ || def.msg_type == fmtu_msg_type_ ||
+       def.msg_type == file_msg_type_);
 
   // Cache mult_val on every field so the decode hot-path needs no map lookup
   for (auto& field : def.fields) {
@@ -762,8 +763,9 @@ std::vector<FileSegment> layoutEmbeddedFile(EmbeddedFile& file) {
   return segments;
 }
 
-bool streamEmbeddedFile(const EmbeddedFile& file, const uint8_t* log, size_t log_length,
-                        const std::function<bool(const uint8_t*, size_t)>& write) {
+bool streamEmbeddedFile(
+    const EmbeddedFile& file, const uint8_t* log, size_t log_length,
+    const std::function<bool(const uint8_t*, size_t)>& write) {
   EmbeddedFile layout_copy = file;
   for (const FileSegment& seg : layoutEmbeddedFile(layout_copy)) {
     // A gap is never filled in: the output would contain bytes the log does not have.
@@ -792,9 +794,13 @@ std::string embeddedFileDigest(const EmbeddedFile& file, const uint8_t* log, siz
     if (c.log_pos > log_length || c.length > log_length - c.log_pos) {
       return {};
     }
-    const uint8_t fixed[6] = {static_cast<uint8_t>(c.offset),       static_cast<uint8_t>(c.offset >> 8),
-                              static_cast<uint8_t>(c.offset >> 16), static_cast<uint8_t>(c.offset >> 24),
-                              c.declared_length,                    c.length};
+    const uint8_t fixed[6] = {
+        static_cast<uint8_t>(c.offset),
+        static_cast<uint8_t>(c.offset >> 8),
+        static_cast<uint8_t>(c.offset >> 16),
+        static_cast<uint8_t>(c.offset >> 24),
+        c.declared_length,
+        c.length};
     hasher.update(fixed, sizeof(fixed));
     hasher.update(log + c.log_pos, c.length);
   }
@@ -819,8 +825,9 @@ void Parser::indexEmbeddedFiles() {
     embedded_files_.push_back(std::move(ef));
   }
   file_chunks_.clear();
-  std::sort(embedded_files_.begin(), embedded_files_.end(),
-            [](const EmbeddedFile& a, const EmbeddedFile& b) { return a.name < b.name; });
+  std::sort(embedded_files_.begin(), embedded_files_.end(), [](const EmbeddedFile& a, const EmbeddedFile& b) {
+    return a.name < b.name;
+  });
 }
 
 }  // namespace pj_drone::ardupilot

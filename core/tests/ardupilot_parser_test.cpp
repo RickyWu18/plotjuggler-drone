@@ -34,8 +34,9 @@ void header(std::vector<uint8_t>& out, uint8_t msgid) {
   out.push_back(msgid);
 }
 
-void fmt(std::vector<uint8_t>& out, uint8_t type, uint8_t len, const std::string& name, const std::string& format,
-         const std::string& labels) {
+void fmt(
+    std::vector<uint8_t>& out, uint8_t type, uint8_t len, const std::string& name, const std::string& format,
+    const std::string& labels) {
   header(out, 128);
   out.push_back(type);
   out.push_back(len);
@@ -44,8 +45,8 @@ void fmt(std::vector<uint8_t>& out, uint8_t type, uint8_t len, const std::string
   putStr(out, labels, 64);
 }
 
-void fileChunk(std::vector<uint8_t>& out, const std::string& name, uint32_t offset, uint8_t length,
-               const std::string& data) {
+void fileChunk(
+    std::vector<uint8_t>& out, const std::string& name, uint32_t offset, uint8_t length, const std::string& data) {
   header(out, 162);
   putStr(out, name, 16);
   put<uint32_t>(out, offset);
@@ -317,7 +318,7 @@ TEST(ArdupilotParser, FileSizeComesFromChunksNotFromDeclaredLength) {
   std::vector<uint8_t> log;
   fmt(log, 162, 88, "FILE", "NIBZ", "FileName,Offset,Length,Data");
   fileChunk(log, "a.bin", 0, 4, "abcd");
-  fileChunk(log, "a.bin", 8, 4, "ijkl");  // bytes 4..8 never logged
+  fileChunk(log, "a.bin", 8, 4, "ijkl");                  // bytes 4..8 never logged
   fileChunk(log, "b.bin", 0, 100, std::string(64, 'x'));  // declares 100 bytes, a chunk holds at most 64
 
   Parser parser(log.data(), log.size());

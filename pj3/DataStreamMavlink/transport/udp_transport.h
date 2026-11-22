@@ -2,19 +2,19 @@
 
 #pragma once
 
-#include "mavlink_transport.h"
 #include <QHostAddress>
 #include <QUdpSocket>
+
+#include "mavlink_transport.h"
 
 // UDP bidirectional transport.
 // Binds to AnyIPv4 on the given port. The sender address/port of the most
 // recently received datagram is stored and used as the write destination,
 // enabling SET_MESSAGE_INTERVAL commands to be sent back to the vehicle/SITL.
-class UdpTransport : public MavlinkTransport
-{
+class UdpTransport : public MavlinkTransport {
   Q_OBJECT
 
-public:
+ public:
   explicit UdpTransport(quint16 port, QObject* parent = nullptr);
 
   bool open() override;
@@ -23,10 +23,10 @@ public:
   bool canWrite() const override;
   qint64 write(const QByteArray& data) override;
 
-private slots:
+ private slots:
   void onReadyRead();
 
-private:
+ private:
   quint16 _port;
   QUdpSocket* _socket = nullptr;
   QHostAddress _senderAddress;

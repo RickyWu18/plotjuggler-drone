@@ -1,12 +1,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "dataload_ardupilot.h"
-#include "ardupilot_info_dialog.h"
-#include "plot_map_sink.h"
-#include "qt_path.h"
-
-#include "pj_drone_core/ardupilot/parser.hpp"
-#include "pj_drone_core/io/mapped_file.hpp"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -21,31 +15,36 @@
 #include <filesystem>
 #include <stdexcept>
 
+#include "ardupilot_info_dialog.h"
+#include "pj_drone_core/ardupilot/parser.hpp"
+#include "pj_drone_core/io/mapped_file.hpp"
+#include "plot_map_sink.h"
+#include "qt_path.h"
+
 namespace ap = pj_drone::ardupilot;
 
-const std::vector<const char*>& DataLoadArdupilot::compatibleFileExtensions() const
-{
-  static std::vector<const char*> exts = { "BIN" };
+const std::vector<const char*>& DataLoadArdupilot::compatibleFileExtensions() const {
+  static std::vector<const char*> exts = {"BIN"};
   return exts;
 }
 
-bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
-                                         PJ::PlotDataMapRef& dest)
-{
+bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info, PJ::PlotDataMapRef& dest) {
   QSettings pref("DataLoadArdupilot", "settings");
-  bool show_units        = pref.value("show_units", false).toBool();
-  bool load_files        = pref.value("load_files", true).toBool();
-  bool official_compat   = pref.value("official_compat", false).toBool();
+  bool show_units = pref.value("show_units", false).toBool();
+  bool load_files = pref.value("load_files", true).toBool();
+  bool official_compat = pref.value("official_compat", false).toBool();
 
   {
     QDialog dlg;
     dlg.setWindowTitle("ArduPilot Load Settings");
-    auto* layout      = new QVBoxLayout(&dlg);
-    auto* cb_units    = new QCheckBox("Append units to series names (e.g. Roll \xe2\x86\x92 Roll(deg))", &dlg);
-    auto* cb_files    = new QCheckBox("Load embedded FILE messages (may be slow for large logs)", &dlg);
-    auto* cb_official = new QCheckBox("Use official ArduPilot plugin naming format\n"
-                                      "(leading slash and # before instance: ATT/0/Roll \xe2\x86\x92 /ATT/#0/Roll)", &dlg);
-    auto* buttons     = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    auto* layout = new QVBoxLayout(&dlg);
+    auto* cb_units = new QCheckBox("Append units to series names (e.g. Roll \xe2\x86\x92 Roll(deg))", &dlg);
+    auto* cb_files = new QCheckBox("Load embedded FILE messages (may be slow for large logs)", &dlg);
+    auto* cb_official = new QCheckBox(
+        "Use official ArduPilot plugin naming format\n"
+        "(leading slash and # before instance: ATT/0/Roll \xe2\x86\x92 /ATT/#0/Roll)",
+        &dlg);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     cb_units->setChecked(show_units);
     cb_files->setChecked(load_files);
     cb_official->setChecked(official_compat);
@@ -55,9 +54,11 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
     layout->addWidget(buttons);
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    if (dlg.exec() != QDialog::Accepted) return false;
-    show_units      = cb_units->isChecked();
-    load_files      = cb_files->isChecked();
+    if (dlg.exec() != QDialog::Accepted) {
+      return false;
+    }
+    show_units = cb_units->isChecked();
+    load_files = cb_files->isChecked();
     official_compat = cb_official->isChecked();
     pref.setValue("show_units", show_units);
     pref.setValue("load_files", load_files);
@@ -67,12 +68,14 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
   const std::filesystem::path log_path = pathFromQString(info->filename);
   pj_drone::io::MappedFile mapped;
   std::string map_error;
-  if (!mapped.open(log_path, &map_error))
-  {
-    throw std::runtime_error("ArduPilot: failed to open file: " + info->filename.toStdString() +
-                             (map_error.empty() ? "" : " (" + map_error + ")"));
+  if (!mapped.open(log_path, &map_error)) {
+    throw std::runtime_error(
+        "ArduPilot: failed to open file: " + info->filename.toStdString() +
+        (map_error.empty() ? "" : " (" + map_error + ")"));
   }
-  if (mapped.size() == 0) return false;
+  if (mapped.size() == 0) {
+    return false;
+  }
 
   QWidget* main_window = QApplication::activeWindow();
 
@@ -85,23 +88,24 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
   progress_dialog.setAutoReset(false);
   progress_dialog.show();
 
-  if (auto* bar = progress_dialog.findChild<QProgressBar*>())
-  {
+  if (auto* bar = progress_dialog.findChild<QProgressBar*>()) {
     bar->setTextVisible(true);
     bar->setAlignment(Qt::AlignCenter);
   }
 
-  QElapsedTimer parse_timer;   // throttle timer for progress callback
-  QElapsedTimer load_timer;    // total load time for Debug tab
+  QElapsedTimer parse_timer;  // throttle timer for progress callback
+  QElapsedTimer load_timer;   // total load time for Debug tab
   parse_timer.start();
   load_timer.start();
   PlotMapSink sink(dest, show_units, official_compat);
 
   ap::ParserOptions options;
-  options.load_files    = load_files;
+  options.load_files = load_files;
   options.hash_instance = official_compat;
-  options.progress      = [&](size_t pos, size_t total) -> bool {
-    if (parse_timer.elapsed() < 50) return true;
+  options.progress = [&](size_t pos, size_t total) -> bool {
+    if (parse_timer.elapsed() < 50) {
+      return true;
+    }
     parse_timer.restart();
     progress_dialog.setValue(static_cast<int>(100.0 * pos / total));
     QApplication::processEvents();
@@ -110,27 +114,20 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info,
 
   ap::Parser parser(mapped.data(), mapped.size(), std::move(options), &sink);
 
-  if (parser.result() != ap::Parser::Result::kOk)
-  {
+  if (parser.result() != ap::Parser::Result::kOk) {
     dest.clear();  // the sink writes through: partial data may already be in dest
     return false;
   }
 
   ApLoadStats stats;
-  stats.load_ms       = load_timer.elapsed();
-  stats.file_size     = static_cast<qint64>(mapped.size());
+  stats.load_ms = load_timer.elapsed();
+  stats.file_size = static_cast<qint64>(mapped.size());
   stats.total_samples = parser.totalSamples();
-  stats.series_count  = parser.seriesCount();
+  stats.series_count = parser.seriesCount();
 
-  auto* dlg = new ArdupilotInfoDialog(parser.parameters(),
-                                      parser.embeddedFiles(),
-                                      parser.logMessages(),
-                                      info->filename,
-                                      stats,
-                                      main_window);
-  dlg->setWindowTitle(
-      QString("ArduPilot log: %1")
-          .arg(QFileInfo(info->filename).fileName()));
+  auto* dlg = new ArdupilotInfoDialog(
+      parser.parameters(), parser.embeddedFiles(), parser.logMessages(), info->filename, stats, main_window);
+  dlg->setWindowTitle(QString("ArduPilot log: %1").arg(QFileInfo(info->filename).fileName()));
   dlg->setAttribute(Qt::WA_DeleteOnClose);
   dlg->restoreSettings();
   dlg->show();

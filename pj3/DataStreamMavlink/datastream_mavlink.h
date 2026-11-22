@@ -3,6 +3,7 @@
 #pragma once
 
 #include <PlotJuggler/datastreamer_base.h>
+
 #include <QAction>
 
 #define MAVLINK_USE_MESSAGE_INFO
@@ -16,40 +17,35 @@ class IntervalSettingsDialog;
 // Plugin facade: wires Transport → Parser → (Controller + dataMap injection).
 // All MAVLink state is owned by dedicated classes; this class only holds
 // the PlotJuggler mutex and dataMap contract.
-class DataStreamMavlink : public PJ::DataStreamer
-{
+class DataStreamMavlink : public PJ::DataStreamer {
   Q_OBJECT
   Q_PLUGIN_METADATA(IID "facontidavide.PlotJuggler3.DataStreamer")
   Q_INTERFACES(PJ::DataStreamer)
 
-public:
+ public:
   DataStreamMavlink() = default;
   ~DataStreamMavlink() override;
 
   bool start(QStringList* selected) override;
   void shutdown() override;
-  bool isRunning() const override
-  {
+  bool isRunning() const override {
     return _running;
   }
-  const char* name() const override
-  {
+  const char* name() const override {
     return "MAVLink Streamer";
   }
-  bool isDebugPlugin() override
-  {
+  bool isDebugPlugin() override {
     return false;
   }
   const std::vector<QAction*>& availableActions() override;
 
-private slots:
+ private slots:
   void onMessageDecoded(mavlink_message_t msg, double recvTimeSec);
 
-private:
-  MavlinkTransport* createTransport(int mode, quint16 udpPort,
-                                    const QString& tcpHost, quint16 tcpPort,
-                                    const QString& serialPath,
-                                    const QString& serialDisplay, int baud);
+ private:
+  MavlinkTransport* createTransport(
+      int mode, quint16 udpPort, const QString& tcpHost, quint16 tcpPort, const QString& serialPath,
+      const QString& serialDisplay, int baud);
   void buildActions();
 
   bool _running = false;

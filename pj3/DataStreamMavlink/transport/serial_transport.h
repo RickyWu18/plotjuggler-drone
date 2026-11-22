@@ -2,23 +2,22 @@
 
 #pragma once
 
-#include "mavlink_transport.h"
 #include <QSerialPort>
 #include <QString>
 
-struct SerialConfig
-{
-  QString systemPath;    // e.g. "COM3" or "/dev/ttyUSB0"
-  QString displayName;   // shown in error messages
+#include "mavlink_transport.h"
+
+struct SerialConfig {
+  QString systemPath;   // e.g. "COM3" or "/dev/ttyUSB0"
+  QString displayName;  // shown in error messages
   int baudRate = 57600;
 };
 
 // Bidirectional serial transport (8N1, no flow control).
-class SerialTransport : public MavlinkTransport
-{
+class SerialTransport : public MavlinkTransport {
   Q_OBJECT
 
-public:
+ public:
   explicit SerialTransport(SerialConfig cfg, QObject* parent = nullptr);
 
   bool open() override;
@@ -27,10 +26,10 @@ public:
   bool canWrite() const override;
   qint64 write(const QByteArray& data) override;
 
-private slots:
+ private slots:
   void onReadyRead();
 
-private:
+ private:
   SerialConfig _cfg;
   QSerialPort* _port = nullptr;
 };

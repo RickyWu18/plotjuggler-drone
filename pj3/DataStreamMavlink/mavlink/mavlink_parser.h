@@ -10,24 +10,23 @@
 
 // Stateful MAVLink byte-stream accumulator.
 // Owns the mavlink_parse_char() state; emits messageDecoded for each complete frame.
-class MavlinkParser : public QObject
-{
+class MavlinkParser : public QObject {
   Q_OBJECT
 
-public:
+ public:
   explicit MavlinkParser(QObject* parent = nullptr);
 
   void reset();
 
-public slots:
+ public slots:
   void onBytesReceived(QByteArray data, double recvTimeSec);
 
-signals:
+ signals:
   void messageDecoded(mavlink_message_t msg, double recvTimeSec);
   // Emitted once at the end of each onBytesReceived() call (i.e. per readyRead batch).
   void batchProcessed();
 
-private:
+ private:
   mavlink_status_t _status{};
   mavlink_message_t _msg{};
   uint8_t _channel = MAVLINK_COMM_0;

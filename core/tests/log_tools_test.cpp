@@ -1,3 +1,5 @@
+#include "pj_drone_core/ardupilot/log_tools.hpp"
+
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -5,8 +7,6 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
-#include "pj_drone_core/ardupilot/log_tools.hpp"
 
 using namespace pj_drone::ardupilot;
 
@@ -123,9 +123,30 @@ TEST(LogTools, ResolveExportPathRejectsUnsafeNames) {
   EXPECT_TRUE(resolveExportPath(dir, "@SYS/a.txt").has_value());
   EXPECT_TRUE(resolveExportPath(dir, "plain.bin").has_value());
 
-  for (const char* bad : {"", "../evil.bin", "a/../../evil.bin", "..", ".", "/abs.bin", "\\abs.bin", "a\\..\\..\\x",
-                          "C:\\evil.bin", "C:evil.bin", "a:stream", "dir/", "a//b", "con", "NUL.txt", "lpt1", "x.",
-                          "x ", "a<b", "a|b", "a?b", "a*b", "tab\there"}) {
+  for (const char* bad :
+       {"",
+        "../evil.bin",
+        "a/../../evil.bin",
+        "..",
+        ".",
+        "/abs.bin",
+        "\\abs.bin",
+        "a\\..\\..\\x",
+        "C:\\evil.bin",
+        "C:evil.bin",
+        "a:stream",
+        "dir/",
+        "a//b",
+        "con",
+        "NUL.txt",
+        "lpt1",
+        "x.",
+        "x ",
+        "a<b",
+        "a|b",
+        "a?b",
+        "a*b",
+        "tab\there"}) {
     EXPECT_FALSE(resolveExportPath(dir, bad).has_value()) << bad;
   }
   EXPECT_FALSE(resolveExportPath(dir, std::filesystem::absolute("evil_abs.bin").string()).has_value());
@@ -274,7 +295,13 @@ TEST_F(ExportFixture, SizeMismatchIsReportedAsWarning) {
 
 TEST(LogTools, SanitizeFileNameEscapesNonPrintableBytesAndPercent) {
   EXPECT_EQ(sanitizeFileName("@SYS/crash.bin"), "@SYS/crash.bin");
-  EXPECT_EQ(sanitizeFileName(std::string("a\xFF" "b", 3)), "a%FFb");
+  EXPECT_EQ(
+      sanitizeFileName(
+          std::string(
+              "a\xFF"
+              "b",
+              3)),
+      "a%FFb");
   EXPECT_EQ(sanitizeFileName("100%"), "100%25");
   EXPECT_EQ(sanitizeFileName("tab\there\x7F"), "tab%09here%7F");
   // '%' is escaped too, so an escape sequence in the log cannot be confused with a sanitized byte.

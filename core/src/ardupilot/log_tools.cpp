@@ -16,7 +16,8 @@ namespace {
 
 std::string toLower(std::string_view s) {
   std::string out(s);
-  std::transform(out.begin(), out.end(), out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  std::transform(
+      out.begin(), out.end(), out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return out;
 }
 
@@ -137,8 +138,9 @@ bool writeTextFile(const std::filesystem::path& path, const std::string& text) {
 std::vector<std::string> embeddedFileWarnings(const EmbeddedFile& file) {
   std::vector<std::string> out;
   if (file.estimated_size != file.size) {
-    out.push_back("declared size " + std::to_string(file.estimated_size) + " bytes (from FILE offsets) but " +
-                  std::to_string(file.size) + " bytes assembled");
+    out.push_back(
+        "declared size " + std::to_string(file.estimated_size) + " bytes (from FILE offsets) but " +
+        std::to_string(file.size) + " bytes assembled");
   }
   if (file.overlap_bytes > 0) {
     out.push_back(std::to_string(file.overlap_bytes) + " byte(s) provided by several chunks, the later one is used");
@@ -221,8 +223,8 @@ std::optional<std::filesystem::path> resolveExportPath(const std::filesystem::pa
   return target;
 }
 
-std::vector<std::string> findExportConflicts(const std::vector<const EmbeddedFile*>& files,
-                                             const std::filesystem::path& dir) {
+std::vector<std::string> findExportConflicts(
+    const std::vector<const EmbeddedFile*>& files, const std::filesystem::path& dir) {
   std::vector<std::string> conflicts;
   for (const EmbeddedFile* file : files) {
     if (file == nullptr) {
@@ -237,8 +239,9 @@ std::vector<std::string> findExportConflicts(const std::vector<const EmbeddedFil
   return conflicts;
 }
 
-ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const std::vector<const EmbeddedFile*>& files,
-                                 const std::filesystem::path& dir, OverwritePolicy policy) {
+ExportResult exportEmbeddedFiles(
+    const std::filesystem::path& log_path, const std::vector<const EmbeddedFile*>& files,
+    const std::filesystem::path& dir, OverwritePolicy policy) {
   ExportResult result;
   const auto fail = [&result](const EmbeddedFile& file, std::string reason) {
     result.failed.push_back({file.name, std::move(reason)});
@@ -325,9 +328,9 @@ ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const st
     {
       std::ofstream out(part, std::ios::binary | std::ios::trunc);
       wrote = out.good() && streamEmbeddedFile(*requested, log.data(), log.size(), [&out](const uint8_t* p, size_t n) {
-        out.write(reinterpret_cast<const char*>(p), static_cast<std::streamsize>(n));
-        return out.good();
-      });
+                out.write(reinterpret_cast<const char*>(p), static_cast<std::streamsize>(n));
+                return out.good();
+              });
       out.close();
       wrote = wrote && !out.fail();
     }
@@ -344,7 +347,8 @@ ExportResult exportEmbeddedFiles(const std::filesystem::path& log_path, const st
       continue;
     }
     // A file may have appeared since the check above; never replace it when the user chose to skip.
-    if (policy == OverwritePolicy::kSkipExisting && std::filesystem::exists(std::filesystem::symlink_status(*path, ec))) {
+    if (policy == OverwritePolicy::kSkipExisting &&
+        std::filesystem::exists(std::filesystem::symlink_status(*path, ec))) {
       std::filesystem::remove(part, ec);
       result.skipped.push_back(requested->name);
       continue;

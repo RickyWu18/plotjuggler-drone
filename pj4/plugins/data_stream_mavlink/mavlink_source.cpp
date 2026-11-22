@@ -161,7 +161,8 @@ class MavlinkSource : public PJ::StreamSourceBase {
       row_.push_back({binding.fields[i], toValueRef(message.values[i])});
     }
     const int64_t ts = message.embedded_timestamp_ns.value_or(recv_ns);
-    return writeHost().appendBoundRecord(binding.topic, PJ::Timestamp{ts}, PJ::Span<const PJ::sdk::BoundFieldValue>(row_));
+    return writeHost().appendBoundRecord(
+        binding.topic, PJ::Timestamp{ts}, PJ::Span<const PJ::sdk::BoundFieldValue>(row_));
   }
 
   mavlink_detail::MavlinkDialog dialog_;
