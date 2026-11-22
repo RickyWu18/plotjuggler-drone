@@ -1,0 +1,51 @@
+name: CI Format
+
+# Pull-request check: C/C++ lines changed by the PR must match .clang-format (Google style, 120 columns).
+# Only changed lines are checked, so untouched legacy code never fails the build. To fix locally:
+#   pip install clang-format==22.1.0
+#   git clang-format <base-branch>
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Same version as the plotjuggler_sdk pre-commit hook.
+      - name: Install clang-format
+        run: pip install "clang-format==22.1.0"
+
+      - name: Check formatting of changed lines
+        if: github.event_name == 'pull_request'
+        run: |
+          mapfile -t FILES < <(git diff --name-only --diff-filter=ACMR \
+            "${{ github.event.pull_request.base.sha }}" HEAD -- \
+            '*.c' '*.cc' '*.cpp' '*.h' '*.hpp' ':!3rdparty')
+          if [[ ${#FILES[@]} -eq 0 ]]; then
+            echo "No C/C++ files changed."
+            exit 0
+          fi
+          OUT=$(git clang-format --diff "${{ github.event.pull_request.base.sha }}" HEAD -- "${FILES[@]}" || true)
+          if [[ "${OUT}" == *"did not modify any files"* || "${OUT}" == *"no modified files to format"* ]]; then
+            echo "Formatting OK."
+          else
+            echo "${OUT}"
+            echo "::error::Formatting differs from .clang-format. Run: git clang-format <base-branch>"
+            exit 1
+          fi

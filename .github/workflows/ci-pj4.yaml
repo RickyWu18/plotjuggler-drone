@@ -1,0 +1,87 @@
+name: CI PJ4
+
+# Pull-request check for the PJ4 plugins: build every plugin and run all tests on each supported
+# platform. Mirrors the build/test steps of release-pj4.yaml, minus packaging and publishing.
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'pj4/**'
+      - 'core/**'
+      - '3rdparty/**'
+      - '.gitmodules'
+      - '.github/workflows/ci-pj4.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+    working-directory: pj4
+
+jobs:
+  build-test:
+    name: ${{ matrix.os_label }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x86_64
+            os_label: linux
+          - runner: ubuntu-22.04-arm
+            arch: aarch64
+            os_label: linux
+          - runner: macos-15
+            arch: arm64
+            os_label: macos
+          # Pinned to windows-2022: the VS18/MSVC 14.5x image breaks some Conan dependency builds.
+          - runner: windows-2022
+            arch: x64
+            os_label: windows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install Conan
+        id: setup-conan
+        uses: conan-io/setup-conan@v1.3.0
+
+      - name: Restore Conan package cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.setup-conan.outputs.conan-home }}/p
+          key: conan-${{ steps.setup-conan.outputs.conan-version }}-${{ runner.os }}-${{ matrix.arch }}-all-${{ hashFiles('pj4/conanfile.py', 'pj4/SDK_VERSION') }}
+          restore-keys: |
+            conan-${{ steps.setup-conan.outputs.conan-version }}-${{ runner.os }}-${{ matrix.arch }}-all-
+
+      # ninja 1.13.0 corrupts MSVC link response files (LNK1181); pin the last good PyPI release.
+      - name: Install cmake and ninja
+        run: pip install cmake "ninja==1.11.1.4"
+
+      - name: Set up MSVC environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Detect Conan profile
+        run: conan profile detect --force
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Test
+        run: ctest --test-dir build/all -C Release -V --output-on-failure

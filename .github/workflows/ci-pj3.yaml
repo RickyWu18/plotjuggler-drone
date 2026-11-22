@@ -1,0 +1,171 @@
+name: CI PJ3
+
+# Pull-request check for the PJ3 plugins: build them against PlotJuggler on Ubuntu and Windows.
+# PlotJuggler itself is cached per PJ_TAG, so only the first run pays for building it.
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'pj3/**'
+      - 'core/**'
+      - '3rdparty/**'
+      - '.gitmodules'
+      - '.github/workflows/ci-pj3.yaml'
+  workflow_dispatch:
+
+env:
+  PJ_TAG: '3.17.2'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm_cache
+    steps:
+      - name: Checkout PlotJuggler-Drone
+        uses: actions/checkout@v6
+        with:
+          path: drone
+          submodules: recursive
+
+      - name: Cache PlotJuggler install
+        id: cache-pj
+        uses: actions/cache@v5
+        with:
+          path: pj_install
+          key: pj-install-ubuntu-${{ env.PJ_TAG }}
+
+      - name: Clone PlotJuggler ${{ env.PJ_TAG }}
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch ${{ env.PJ_TAG }} \
+            https://github.com/facontidavide/PlotJuggler.git PlotJuggler
+
+      - name: Install Qt5 and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qtbase5-dev \
+            libqt5svg5-dev \
+            libqt5websockets5-dev \
+            libqt5opengl5-dev \
+            libqt5x11extras5-dev \
+            libqt5serialport5-dev \
+            libprotoc-dev \
+            libmosquitto-dev \
+            libcurl4-openssl-dev
+
+      - name: Cache CPM packages
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/cpm_cache
+          key: cpm-ubuntu-pj-${{ env.PJ_TAG }}
+          restore-keys: cpm-ubuntu-
+
+      - name: Configure PlotJuggler
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        run: |
+          cmake -S PlotJuggler -B pj_build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/pj_install
+
+      - name: Build PlotJuggler
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        run: cmake --build pj_build -- -j$(nproc)
+
+      - name: Install PlotJuggler
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        run: cmake --install pj_build
+
+      - name: Configure drone plugins
+        run: |
+          cmake -S drone/pj3 -B drone_build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPJ_INSTALL=${{ github.workspace }}/pj_install
+
+      - name: Build drone plugins
+        run: cmake --build drone_build -- -j$(nproc)
+
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    env:
+      CXXFLAGS: /MP
+      CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm_cache
+    steps:
+      - name: Checkout PlotJuggler-Drone
+        uses: actions/checkout@v6
+        with:
+          path: drone
+          submodules: recursive
+
+      - name: Cache PlotJuggler install
+        id: cache-pj
+        uses: actions/cache@v5
+        with:
+          path: pj_install
+          key: pj-install-windows-${{ env.PJ_TAG }}
+
+      - name: Clone PlotJuggler ${{ env.PJ_TAG }}
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch ${{ env.PJ_TAG }} `
+            https://github.com/facontidavide/PlotJuggler.git PlotJuggler
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '5.15.*'
+          arch: 'win64_msvc2019_64'
+          dir: '${{ github.workspace }}/qt_installation/'
+          cache: 'true'
+
+      - name: Cache CPM packages
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/cpm_cache
+          key: cpm-windows-pj-${{ env.PJ_TAG }}
+          restore-keys: cpm-windows-
+
+      - name: Configure PlotJuggler
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          cmake -S PlotJuggler -B pj_build `
+            -A x64 `
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/pj_install" `
+            -DPJ_INSTALLATION=windows `
+            -DPJ_PLUGINS_DIRECTORY=bin
+
+      - name: Build PlotJuggler
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: cmake --build pj_build --config Release --parallel
+
+      - name: Install PlotJuggler
+        if: steps.cache-pj.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: cmake --install pj_build --config Release
+
+      - name: Configure drone plugins
+        shell: pwsh
+        run: |
+          cmake -S drone/pj3 -B drone_build `
+            -A x64 `
+            "-DPJ_INSTALL=${{ github.workspace }}/pj_install"
+
+      - name: Build drone plugins
+        shell: pwsh
+        run: cmake --build drone_build --config Release --parallel

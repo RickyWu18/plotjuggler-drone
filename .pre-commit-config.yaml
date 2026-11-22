@@ -1,0 +1,24 @@
+exclude: ^\.vscode/|^3rdparty/|^pj4/build/|^pj4/dist/
+repos:
+
+  # Standard hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+      - id: fix-byte-order-marker
+
+  # C/C++ formatting (same version as ci-format.yaml and plotjuggler_sdk)
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v22.1.0
+    hooks:
+      - id: clang-format
+        types_or: [c++, c]
+        args: ['-fallback-style=none', '-i']
