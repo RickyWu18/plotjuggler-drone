@@ -136,6 +136,7 @@ std::string ArdupilotDialog::widget_data() {
 
   wd.setFilePicker("btnModeConfig", "Choose...", "JSON files (*.json);;All files (*)", "Mode names file");
   wd.setLabel("labelModeConfig", modeConfigText());
+  wd.setLabel("labelModeFile", mode_config_path_.empty() ? std::string("No file selected") : mode_config_path_);
   wd.setEnabled("btnModeConfigClear", !mode_config_path_.empty());
 
   wd.setLabel("labelStatus", status_);
@@ -306,13 +307,12 @@ void ArdupilotDialog::setModeConfig(const std::string& path) {
 
 std::string ArdupilotDialog::modeConfigText() const {
   if (mode_config_path_.empty()) {
-    return "Mode names: built-in tables only";
+    return "Built-in tables only";
   }
   if (!mode_config_error_.empty()) {
-    return "Not used (" + mode_config_error_ + "), built-in tables only:\n" + mode_config_path_;
+    return "Not used (" + mode_config_error_ + "), built-in tables only";
   }
-  return "Mode names: " + std::to_string(mode_overrides_.size()) + " entr" +
-         (mode_overrides_.size() == 1 ? "y" : "ies") + " from:\n" + mode_config_path_;
+  return std::to_string(mode_overrides_.size()) + " entr" + (mode_overrides_.size() == 1 ? "y" : "ies") + " loaded";
 }
 
 void ArdupilotDialog::refilterParameters() {
