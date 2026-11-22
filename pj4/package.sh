@@ -2,8 +2,8 @@
 # Package plugins from a finished build into distributable ZIPs (dist/<id>-<version>-<os>-<arch>.zip).
 #   ./package.sh [plugin_dir ...]   default: every directory under plugins/
 # Build dir per plugin: $BUILD_DIR if set, else build/<plugin> (./build.sh <plugin>), else build/all (./build.sh).
-# Stages dist/<id>/ (binary + manifest.json) then zips its contents (at the zip root) into the ZIP.
-# Files in plugins/<p>/resources/ (if present) are copied into the ZIP root too.
+# Stages dist/<id>/ (binary + manifest.json) then zips it with a single top-level <id>/ entry (PJ requirement).
+# Files in plugins/<p>/resources/ (if present) are copied into <id>/ too.
 # Validates manifest.json (incl. min_sdk_required <= SDK_VERSION) and the compiled binary's embedded manifest.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,9 +41,15 @@ from pathlib import Path
 src, dst = Path(sys.argv[1]), Path(sys.argv[2])
 dst.unlink(missing_ok=True)
 with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zf:
+    # PJ requires a single top-level entry named after the plugin id (= stage dir name).
+    top = src.name
+    zf.writestr(top + "/", "")
     for f in sorted(src.rglob("*")):
-        if f.is_file():
-            zf.write(f, f.relative_to(src).as_posix())
+        arc = f"{top}/{f.relative_to(src).as_posix()}"
+        if f.is_dir():
+            zf.writestr(arc + "/", "")
+        else:
+            zf.write(f, arc)
 print(f"Created {dst}")
 PYEOF
 done

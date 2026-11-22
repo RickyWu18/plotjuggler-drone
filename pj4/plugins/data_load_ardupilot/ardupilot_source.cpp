@@ -163,7 +163,7 @@ class ArdupilotSource : public PJ::FileSourceBase {
   }
 
   std::string saveConfig() const override {
-    return nlohmann::json{{"filepath", filepath_}, {"show_units", dialog_.showUnits()}}.dump();
+    return dialog_.configJson(filepath_);
   }
 
   PJ::Status loadConfig(std::string_view config_json) override {
@@ -199,6 +199,7 @@ class ArdupilotSource : public PJ::FileSourceBase {
     ap::ParserOptions options;
     options.load_files = false;
     options.hash_instance = false;
+    options.mode_overrides = dialog_.modeOverrides();
     options.progress = [this](size_t pos, size_t /*total*/) {
       (void)runtimeHost().progressUpdate(pos);
       // Stop and keep: whatever was decoded so far stays in the datastore.

@@ -13,22 +13,6 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QGroupBox" name="groupSettings">
-     <property name="title">
-      <string>Settings</string>
-     </property>
-     <layout class="QVBoxLayout" name="settingsLayout">
-      <item>
-       <widget class="QCheckBox" name="cbShowUnits">
-        <property name="text">
-         <string>Append units to series names (e.g. Roll -&gt; Roll(deg))</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
       <number>0</number>
@@ -251,6 +235,101 @@
           </item>
          </layout>
         </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabSettings">
+      <attribute name="title">
+       <string>Loader Settings</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="loaderSettingsLayout">
+       <item>
+        <widget class="QGroupBox" name="groupSeries">
+         <property name="title">
+          <string>Series names</string>
+         </property>
+         <layout class="QVBoxLayout" name="seriesLayout">
+          <item>
+           <widget class="QCheckBox" name="cbShowUnits">
+            <property name="text">
+             <string>Append units to series names (e.g. Roll -&gt; Roll(deg))</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupModes">
+         <property name="title">
+          <string>Flight mode names</string>
+         </property>
+         <layout class="QHBoxLayout" name="modesLayout">
+          <item>
+           <layout class="QVBoxLayout" name="modeTextLayout">
+            <property name="sizeConstraint">
+             <enum>QLayout::SetNoConstraint</enum>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelModeFile">
+              <property name="text">
+               <string>No file selected</string>
+              </property>
+              <property name="wordWrap">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelModeConfig">
+              <property name="text">
+               <string>Built-in tables only</string>
+              </property>
+              <property name="wordWrap">
+               <bool>true</bool>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">color: gray;</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item alignment="Qt::AlignBottom">
+           <widget class="QPushButton" name="btnModeConfig">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed"/>
+            </property>
+            <property name="text">
+             <string>Choose...</string>
+            </property>
+           </widget>
+          </item>
+          <item alignment="Qt::AlignBottom">
+           <widget class="QPushButton" name="btnModeConfigClear">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed"/>
+            </property>
+            <property name="text">
+             <string>Clear</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="settingsSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
        </item>
       </layout>
      </widget>

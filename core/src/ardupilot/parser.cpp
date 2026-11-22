@@ -59,7 +59,14 @@ Parser::Parser(const uint8_t* data, size_t length, ParserOptions options, Sample
 }
 
 void Parser::parse() {
-  if (!parseSinglePass()) {
+  const bool completed = parseSinglePass();
+  // What was read before a cancel is kept, so the buffered MODE rows are written then too; after a sink error the
+  // sink has refused data and gets no more.
+  if (result_ != Result::kSinkError && sink_ != nullptr &&
+      !deferred_modes_.flush(*sink_, vehicle(), options_.mode_overrides, total_samples_)) {
+    result_ = Result::kSinkError;
+  }
+  if (!completed || result_ == Result::kSinkError) {
     return;
   }
   if (options_.load_files) {
@@ -82,6 +89,9 @@ std::vector<FieldSpec> Parser::buildFieldSpecs(const MessageDef& def) const {
       }
     }
     specs.push_back(std::move(spec));
+  }
+  if (def.mode_idx >= 0) {
+    specs.push_back({"ModeName", ValueType::kString, ""});
   }
   return specs;
 }
@@ -278,6 +288,10 @@ Parser::MessageDef Parser::buildMessageDef(const uint8_t* payload86) {
 
     if ((c == 'B' || c == 'M') && (field.label == "I" || field.label == "Instance")) {
       def.instance_idx = static_cast<int>(i);
+    }
+
+    if (def.name == "MODE" && field.label == "Mode" && (c == 'B' || c == 'M')) {
+      def.mode_idx = static_cast<int>(i);
     }
 
     offset += field.byte_size;
@@ -518,6 +532,10 @@ bool Parser::parseDataPacket(const uint8_t* payload, MessageDef& def) {
     }
   }
 
+  if (def.name == "VER") {
+    collectVehicleEvidence(payload, def);
+  }
+
   // Timestamp is read from the raw bytes to keep the full uint64 precision.
   if (def.timestamp_idx >= 0) {
     last_timestamp_us_ = readLe<uint64_t>(payload + def.fields[static_cast<size_t>(def.timestamp_idx)].offset);
@@ -530,6 +548,7 @@ bool Parser::parseDataPacket(const uint8_t* payload, MessageDef& def) {
       if (field.label == "Message" && field.is_string) {
         std::string text = readCString(payload + field.offset, field.byte_size);
         if (!text.empty()) {
+          vehicle_detector_.offerMessage(text);
           msg_log_.push_back({static_cast<double>(last_timestamp_us_) * 1e-6, std::move(text)});
         }
         break;
@@ -566,8 +585,26 @@ bool Parser::parseDataPacket(const uint8_t* payload, MessageDef& def) {
     values[count++] = decodeField(payload, def.fields[idx]);
   }
 
+  // MODE is named once the whole log has been read: the VER / MSG that identify the vehicle can come after it, and
+  // one log must not be named by two different rule sets.
+  if (def.mode_idx >= 0) {
+    const int mode = payload[def.fields[static_cast<size_t>(def.mode_idx)].offset];
+    deferred_modes_.add(group, timestamp_ns, mode, values.data(), count);
+    return true;
+  }
+
   total_samples_ += count;
   return sink_->append(group, timestamp_ns, values.data(), count);
+}
+
+void Parser::collectVehicleEvidence(const uint8_t* payload, const MessageDef& def) {
+  for (const auto& field : def.fields) {
+    if (field.label == "BU" && (field.fmt_char == 'B' || field.fmt_char == 'M')) {
+      vehicle_detector_.setBuildId(payload[field.offset]);
+    } else if (field.label == "FWS" && field.is_string) {
+      vehicle_detector_.setVerFirmware(readCString(payload + field.offset, field.byte_size));
+    }
+  }
 }
 
 void Parser::parseUnitPacket(const uint8_t* payload, const MessageDef& def) {

@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+- `MODE` has a new string series `ModeName` with the flight mode as text (e.g. `LOITER`). The vehicle type comes from
+  `VER.BU`, then `VER.FWS`, then the firmware banner in `MSG`. A mode that has no name, an unknown vehicle, or a
+  `VER.BU` that disagrees with `VER.FWS` gives `Unknown(<number>)`. The built-in names are generated from the MAVLink
+  `ardupilotmega.xml` at build time.
+- The dialog has a "Mode names" file (JSON) with complete mode enums, for custom firmware and for logs whose vehicle
+  sources disagree. A log it matches is named by that enum only; the built-in names are never mixed in. The path is saved with the plugin config; an unusable file is reported in the
+  dialog and the built-in names are used. Format: `docs/ardupilot/mode_names.md`.
+- The "Mode names" file can also be a MAVLink `ardupilotmega.xml` of any version (e.g. from `c_library_v2`): its
+  `COPTER_MODE`, `PLANE_MODE`, `ROVER_MODE`, `SUB_MODE` and `TRACKER_MODE` enums replace the built-in names of those
+  vehicles, with no rebuild.
+- `MODE` rows are written after the rest of the log has been read, so one log is always named by one vehicle type and
+  one set of rules, also when `MODE` comes before `VER`. With several `VER` records the first one decides.
+
 ## [1.1.0] - 2026-11-15
 
 ### Changed

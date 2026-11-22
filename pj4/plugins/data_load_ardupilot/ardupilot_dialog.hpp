@@ -9,6 +9,7 @@
 
 #include "pj_drone_core/ardupilot/log_tools.hpp"
 #include "pj_drone_core/ardupilot/parser.hpp"
+#include "pj_drone_core/ardupilot/vehicle.hpp"
 
 namespace ardupilot_detail {
 
@@ -22,6 +23,16 @@ class ArdupilotDialog : public PJ::DialogPluginTyped {
   bool showUnits() const {
     return show_units_;
   }
+
+  /// The user's mode-name entries (empty when no file is chosen or it could not be read), looked at before the
+  /// built-in tables.
+  const pj_drone::ardupilot::ModeOverrides& modeOverrides() const {
+    return mode_overrides_;
+  }
+
+  /// The dialog's settings as config JSON, with `filepath` as the log path (the source's, which may be newer than the
+  /// dialog's). saveConfig() is this with the dialog's own path.
+  std::string configJson(const std::string& filepath) const;
 
   // --- Dialog protocol ---
   std::string manifest() const override;
@@ -44,11 +55,17 @@ class ArdupilotDialog : public PJ::DialogPluginTyped {
   void clearPendingExport();
   void scanFile();
   void refilterParameters();
+  void setModeConfig(const std::string& path);
+  std::string modeConfigText() const;
 
   std::string filepath_;
   std::string scanned_path_;
   std::string status_;
   bool show_units_ = false;
+
+  std::string mode_config_path_;
+  std::string mode_config_error_;  // why mode_config_path_ was not used; empty when it was
+  pj_drone::ardupilot::ModeOverrides mode_overrides_;
 
   std::vector<pj_drone::ardupilot::Parameter> params_;
   std::vector<pj_drone::ardupilot::EmbeddedFile> files_;
