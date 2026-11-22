@@ -8,6 +8,7 @@
 #include <QString>
 #include <vector>
 
+#include "pj_drone_core/ardupilot/log_tools.hpp"
 #include "pj_drone_core/ardupilot/parser.hpp"
 
 namespace Ui {
