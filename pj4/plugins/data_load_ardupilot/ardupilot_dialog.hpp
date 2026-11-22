@@ -29,9 +29,10 @@ class ArdupilotDialog : public PJ::DialogPluginTyped {
   const pj_drone::ardupilot::ModeOverrides& modeOverrides() const {
     return mode_overrides_;
   }
-  const std::string& modeConfigPath() const {
-    return mode_config_path_;
-  }
+
+  /// The dialog's settings as config JSON, with `filepath` as the log path (the source's, which may be newer than the
+  /// dialog's). saveConfig() is this with the dialog's own path.
+  std::string configJson(const std::string& filepath) const;
 
   // --- Dialog protocol ---
   std::string manifest() const override;

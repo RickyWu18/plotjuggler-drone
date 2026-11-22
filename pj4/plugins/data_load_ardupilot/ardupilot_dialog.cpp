@@ -42,8 +42,11 @@ std::string ArdupilotDialog::ui_content() const {
 }
 
 std::string ArdupilotDialog::saveConfig() const {
-  return nlohmann::json{{"filepath", filepath_}, {"show_units", show_units_}, {"mode_config", mode_config_path_}}
-      .dump();
+  return configJson(filepath_);
+}
+
+std::string ArdupilotDialog::configJson(const std::string& filepath) const {
+  return nlohmann::json{{"filepath", filepath}, {"show_units", show_units_}, {"mode_config", mode_config_path_}}.dump();
 }
 
 bool ArdupilotDialog::loadConfig(std::string_view config_json) {

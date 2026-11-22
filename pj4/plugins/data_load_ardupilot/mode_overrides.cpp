@@ -121,12 +121,6 @@ bool looksLikeXml(const std::string& text) {
   return first != std::string::npos && text[first] == '<';
 }
 
-}  // namespace
-
-ModeOverridesResult parseModeOverrides(const std::string& text) {
-  return looksLikeXml(text) ? parseModeXml(text) : parseModeJson(text);
-}
-
 ModeOverridesResult parseModeJson(const std::string& json_text) {
   const nlohmann::json root = nlohmann::json::parse(json_text, nullptr, false);
   if (root.is_discarded()) {
@@ -175,6 +169,8 @@ ModeOverridesResult parseModeJson(const std::string& json_text) {
   return result;
 }
 
+}  // namespace
+
 ModeOverridesResult loadModeOverrides(const std::filesystem::path& path) {
   std::ifstream file(path, std::ios::binary);
   if (!file) {
@@ -185,7 +181,8 @@ ModeOverridesResult loadModeOverrides(const std::filesystem::path& path) {
   if (file.bad()) {
     return fail("cannot read the file");
   }
-  return parseModeOverrides(text.str());
+  const std::string content = text.str();
+  return looksLikeXml(content) ? parseModeXml(content) : parseModeJson(content);
 }
 
 }  // namespace ardupilot_detail

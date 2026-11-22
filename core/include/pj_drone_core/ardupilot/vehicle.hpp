@@ -51,8 +51,8 @@ struct ModeOverride {
 };
 using ModeOverrides = std::vector<ModeOverride>;
 
-/// Index of the first entry of `overrides` that applies to `info`; -1 when none does.
-int findModeOverride(const ModeOverrides& overrides, const VehicleInfo& info);
+/// The first entry of `overrides` that applies to `info`; null when none does. The pointer points into `overrides`.
+const ModeOverride* findModeOverride(const ModeOverrides& overrides, const VehicleInfo& info);
 
 /// The text shown for `mode`: the name in `override_entry` when there is one, otherwise the built-in name for the
 /// detected vehicle; "Unknown(<mode>)" when the table in use has no such mode. `override_entry` may be null.

@@ -143,8 +143,8 @@ class Parser {
     return msg_log_;
   }
   /// The vehicle the log comes from, from what has been parsed so far (VER, then MSG).
-  const VehicleInfo& vehicle() const {
-    return vehicle_;
+  VehicleInfo vehicle() const {
+    return vehicle_detector_.info();
   }
   size_t totalSamples() const {
     return total_samples_;
@@ -216,7 +216,6 @@ class Parser {
   void parseFmtuPacket(const uint8_t* payload, const MessageDef& def);
   void parseFilePacket(const uint8_t* payload, const MessageDef& def);
   void collectVehicleEvidence(const uint8_t* payload, const MessageDef& def);
-  void refreshVehicle();
   bool flushDeferredModes();
   void indexEmbeddedFiles();
 
@@ -254,7 +253,6 @@ class Parser {
   std::vector<LogMessage> msg_log_;
 
   VehicleDetector vehicle_detector_;
-  VehicleInfo vehicle_;
 
   // MODE rows are held back until the log has been read (see parseDataPacket); `values` are the log's own fields.
   struct DeferredMode {

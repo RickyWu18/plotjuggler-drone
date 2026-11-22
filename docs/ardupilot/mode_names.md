@@ -28,7 +28,6 @@ An enum the file lacks is skipped, and that vehicle keeps the built-in names. A 
 
 ```json
 {
-  "version": 1,
   "firmwares": [
     {
       "match": "MyBuild",

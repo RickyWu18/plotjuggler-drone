@@ -65,23 +65,23 @@ TEST(ModeOverride, FindsTheFirstEntryWhoseMatchIsInTheFirmwareString) {
   overrides[0].match = "Other";
   overrides[1].match = "MyBuild";
   overrides[2].match = "";  // matches everything, but comes later
-  EXPECT_EQ(findModeOverride(overrides, info), 1);
+  EXPECT_EQ(findModeOverride(overrides, info), &overrides[1]);
 
   overrides[1].match = "Nope";
-  EXPECT_EQ(findModeOverride(overrides, info), 2);
+  EXPECT_EQ(findModeOverride(overrides, info), &overrides[2]);
   overrides.pop_back();
-  EXPECT_EQ(findModeOverride(overrides, info), -1);
+  EXPECT_EQ(findModeOverride(overrides, info), nullptr);
 }
 
 TEST(ModeOverride, MatchIgnoresCase) {
   const VehicleInfo info = customCopter();  // "MyBuild 1.0 [ArduCopter V4.5.0]"
   ModeOverrides overrides(1);
   overrides[0].match = "mybuild";
-  EXPECT_EQ(findModeOverride(overrides, info), 0);
+  EXPECT_EQ(findModeOverride(overrides, info), &overrides[0]);
   overrides[0].match = "ARDUCOPTER v4";
-  EXPECT_EQ(findModeOverride(overrides, info), 0);
+  EXPECT_EQ(findModeOverride(overrides, info), &overrides[0]);
   overrides[0].match = "mybuild 2";
-  EXPECT_EQ(findModeOverride(overrides, info), -1);
+  EXPECT_EQ(findModeOverride(overrides, info), nullptr);
 }
 
 TEST(ModeOverride, VehicleRestrictsTheEntryAndHeliCountsAsCopter) {
@@ -90,10 +90,10 @@ TEST(ModeOverride, VehicleRestrictsTheEntryAndHeliCountsAsCopter) {
   ModeOverrides overrides(2);
   overrides[0].vehicle = VehicleType::kPlane;
   overrides[1].vehicle = VehicleType::kCopter;
-  EXPECT_EQ(findModeOverride(overrides, info), 1);
+  EXPECT_EQ(findModeOverride(overrides, info), &overrides[1]);
 
   info.type = VehicleType::kRover;
-  EXPECT_EQ(findModeOverride(overrides, info), -1);
+  EXPECT_EQ(findModeOverride(overrides, info), nullptr);
 }
 
 TEST(ModeOverride, TheEntryIsTheWholeEnumAndNeverMixedWithTheBuiltInTable) {

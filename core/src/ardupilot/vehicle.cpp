@@ -16,7 +16,7 @@ struct ModeEntry {
 };
 
 // kCopterModes, kPlaneModes, kRoverModes, kSubModes and kTrackerModes: the <VEHICLE>_MODE_<NAME> entries of the MAVLink
-// ardupilotmega.xml dialect, generated at configure time (core/cmake/PjGenerateModeTables.cmake).
+// ardupilotmega.xml dialect, generated at build time by core/scripts/gen_mode_tables.py (see core/CMakeLists.txt).
 #include "pj_drone_mode_tables.inc"
 
 template <size_t N>
@@ -152,18 +152,16 @@ bool containsIgnoreCase(std::string_view haystack, std::string_view needle) {
 
 }  // namespace
 
-int findModeOverride(const ModeOverrides& overrides, const VehicleInfo& info) {
-  const auto modeFamily = [](VehicleType type) { return type == VehicleType::kHeli ? VehicleType::kCopter : type; };
-  for (size_t i = 0; i < overrides.size(); i++) {
-    const auto& entry = overrides[i];
-    if (entry.vehicle && modeFamily(*entry.vehicle) != modeFamily(info.type)) {
+const ModeOverride* findModeOverride(const ModeOverrides& overrides, const VehicleInfo& info) {
+  for (const ModeOverride& entry : overrides) {
+    if (entry.vehicle && family(*entry.vehicle) != family(info.type)) {
       continue;
     }
     if (containsIgnoreCase(info.firmware, entry.match)) {
-      return static_cast<int>(i);
+      return &entry;
     }
   }
-  return -1;
+  return nullptr;
 }
 
 std::string modeLabel(const VehicleInfo& info, const ModeOverride* override_entry, int mode) {

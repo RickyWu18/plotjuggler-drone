@@ -548,7 +548,6 @@ bool Parser::parseDataPacket(const uint8_t* payload, MessageDef& def) {
         std::string text = readCString(payload + field.offset, field.byte_size);
         if (!text.empty()) {
           vehicle_detector_.offerMessage(text);
-          refreshVehicle();
           msg_log_.push_back({static_cast<double>(last_timestamp_us_) * 1e-6, std::move(text)});
         }
         break;
@@ -599,10 +598,10 @@ bool Parser::parseDataPacket(const uint8_t* payload, MessageDef& def) {
 }
 
 bool Parser::flushDeferredModes() {
-  const int found = findModeOverride(options_.mode_overrides, vehicle_);
-  const ModeOverride* entry = found >= 0 ? &options_.mode_overrides[static_cast<size_t>(found)] : nullptr;
+  const VehicleInfo vehicle = vehicle_detector_.info();
+  const ModeOverride* entry = findModeOverride(options_.mode_overrides, vehicle);
   for (DeferredMode& row : deferred_modes_) {
-    mode_label_ = modeLabel(vehicle_, entry, row.mode);
+    mode_label_ = modeLabel(vehicle, entry, row.mode);
     row.values.emplace_back(std::string_view(mode_label_));
     total_samples_ += row.values.size();
     if (!sink_->append(row.group, row.timestamp_ns, row.values.data(), row.values.size())) {
@@ -621,11 +620,6 @@ void Parser::collectVehicleEvidence(const uint8_t* payload, const MessageDef& de
       vehicle_detector_.setVerFirmware(readCString(payload + field.offset, field.byte_size));
     }
   }
-  refreshVehicle();
-}
-
-void Parser::refreshVehicle() {
-  vehicle_ = vehicle_detector_.info();
 }
 
 void Parser::parseUnitPacket(const uint8_t* payload, const MessageDef& def) {

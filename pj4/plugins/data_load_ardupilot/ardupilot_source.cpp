@@ -163,9 +163,7 @@ class ArdupilotSource : public PJ::FileSourceBase {
   }
 
   std::string saveConfig() const override {
-    return nlohmann::json{
-        {"filepath", filepath_}, {"show_units", dialog_.showUnits()}, {"mode_config", dialog_.modeConfigPath()}}
-        .dump();
+    return dialog_.configJson(filepath_);
   }
 
   PJ::Status loadConfig(std::string_view config_json) override {
