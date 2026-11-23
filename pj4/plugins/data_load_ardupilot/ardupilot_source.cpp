@@ -2,10 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <limits>
 #include <nlohmann/json.hpp>
-#include <pj_base/builtin/plot_markers.hpp>
-#include <pj_base/builtin/plot_markers_codec.hpp>
 #include <pj_base/sdk/data_source_patterns.hpp>
 #include <string>
 #include <string_view>
@@ -221,79 +218,20 @@ class ArdupilotSource : public PJ::FileSourceBase {
   }
 
  private:
-  /// Publishes the MSG / MODE / ARM markers as the fields of a "_markers" topic: each field is a series of NaN (it
-  /// draws nothing, and stays out of the axis range) and the marker set addressed to it is drawn on any plot that shows
-  /// the field. The markers are an extra view of data that is already imported, so a host that cannot take them only
-  /// loses the overlay: it is reported, never an import error.
+  /// Publishes the MSG / MODE / ARM markers (see ardupilot_markers.hpp). They are an extra view of data that is already
+  /// imported, so a host that cannot take them only loses the overlay: it is reported, never an import error.
   void publishMarkers(const ap::Parser& parser) {
-    const std::vector<ardupilot_detail::MarkerSeries> series = ardupilot_detail::buildMarkerSeries(parser);
+    const std::vector<ardupilot_detail::MarkerSeries> series = ardupilot_detail::buildMarkerSeries(
+        {parser.logMessages(), parser.modeChanges(), parser.armChanges(), parser.lastTimestampNs()});
     if (series.empty()) {
       return;
     }
     const PJ::sdk::SourceObjectWriteHostView* objects = objectWriteHost();
-    if (objects == nullptr) {
-      warn("host cannot store plot markers");
-      return;
+    const PJ::Status status = objects == nullptr ? PJ::unexpected(std::string("host cannot store plot markers"))
+                                                 : ardupilot_detail::publishMarkers(writeHost(), *objects, series);
+    if (!status) {
+      runtimeHost().reportMessage(PJ::DataSourceMessageLevel::kWarning, "ArduPilot markers: " + status.error());
     }
-    const auto topic = writeHost().ensureTopic(std::string(ardupilot_detail::kMarkerTopic));
-    if (!topic) {
-      warn(topic.error());
-      return;
-    }
-
-    struct Row {
-      int64_t timestamp_ns;
-      PJ::sdk::FieldHandle field;
-    };
-    std::vector<Row> rows;
-    for (const ardupilot_detail::MarkerSeries& entry : series) {
-      const auto field = writeHost().ensureField(*topic, entry.field, PJ::PrimitiveType::kFloat64);
-      if (!field) {
-        warn(field.error());
-        continue;
-      }
-      for (const int64_t time_ns : entry.times_ns) {
-        rows.push_back({time_ns, *field});
-      }
-      publishSet(*objects, entry);
-    }
-    // One topic takes its rows in time order, and the series interleave.
-    std::stable_sort(
-        rows.begin(), rows.end(), [](const Row& a, const Row& b) { return a.timestamp_ns < b.timestamp_ns; });
-    for (const Row& row : rows) {
-      const PJ::sdk::BoundFieldValue value{.field = row.field, .value = std::numeric_limits<double>::quiet_NaN()};
-      const auto status = writeHost().appendBoundRecord(
-          *topic, PJ::Timestamp{row.timestamp_ns}, PJ::Span<const PJ::sdk::BoundFieldValue>(&value, 1));
-      if (!status) {
-        warn(status.error());
-        return;
-      }
-    }
-  }
-
-  void publishSet(const PJ::sdk::SourceObjectWriteHostView& objects, const ardupilot_detail::MarkerSeries& entry) {
-    const std::string key = PJ::sdk::markerSeriesKey(ardupilot_detail::kMarkerTopic, entry.field);
-    const auto topic =
-        objects.registerTopic(PJ::sdk::markerObjectTopicName(key), PJ::sdk::BuiltinObjectType::kPlotMarkers);
-    if (!topic) {
-      warn(topic.error());
-      return;
-    }
-    // The overlay reads the latest set whatever the playback position; stamping it at the first marker keeps the
-    // topic inside the log's own time range instead of stretching it to zero.
-    PJ::Timestamp first = entry.markers.markers.front().t_start;
-    for (const PJ::sdk::PlotMarker& marker : entry.markers.markers) {
-      first = std::min(first, marker.t_start);
-    }
-    const std::vector<uint8_t> bytes = PJ::serializePlotMarkers(entry.markers);
-    const auto pushed = objects.pushOwned(*topic, first, PJ::Span<const uint8_t>(bytes.data(), bytes.size()));
-    if (!pushed) {
-      warn(pushed.error());
-    }
-  }
-
-  void warn(const std::string& message) {
-    runtimeHost().reportMessage(PJ::DataSourceMessageLevel::kWarning, "ArduPilot markers: " + message);
   }
 
   std::string filepath_;

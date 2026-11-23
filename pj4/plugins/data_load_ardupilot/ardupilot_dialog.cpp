@@ -77,7 +77,7 @@ std::string ArdupilotDialog::widget_data() {
   std::vector<std::vector<std::string>> msg_rows;
   msg_rows.reserve(messages_.size());
   for (const auto& m : messages_) {
-    msg_rows.push_back({ap::formatMessageTimestamp(m.timestamp), m.message});
+    msg_rows.push_back({ap::formatMessageTimestamp(m.seconds()), m.message});
   }
   wd.setTableHeaders("tableMsgs", {"Timestamp (s)", "Message"});
   wd.setTableRows("tableMsgs", msg_rows);

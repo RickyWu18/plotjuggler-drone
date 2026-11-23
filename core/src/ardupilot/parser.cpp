@@ -62,8 +62,8 @@ void Parser::parse() {
   const bool completed = parseSinglePass();
   // What was read before a cancel is kept, so the buffered MODE rows are written then too; after a sink error the
   // sink has refused data and gets no more.
-  if (result_ != Result::kSinkError && sink_ != nullptr &&
-      !deferred_modes_.flush(*sink_, vehicle(), options_.mode_overrides, total_samples_, mode_changes_)) {
+  if (result_ != Result::kSinkError &&
+      !deferred_modes_.flush(sink_, vehicle(), options_.mode_overrides, total_samples_)) {
     result_ = Result::kSinkError;
   }
   if (!completed || result_ == Result::kSinkError) {
@@ -295,6 +295,24 @@ Parser::MessageDef Parser::buildMessageDef(const uint8_t* payload86) {
     }
     if (def.name == "MODE" && field.label == "Rsn" && (c == 'B' || c == 'M')) {
       def.mode_reason_idx = static_cast<int>(i);
+    }
+    if (def.name == "MSG") {
+      if (field.label == "Message" && field.is_string && def.msg_text_idx < 0) {
+        def.msg_text_idx = static_cast<int>(i);
+      } else if (field.label == "Severity" && !field.is_string && !field.is_array) {
+        def.msg_severity_idx = static_cast<int>(i);
+      }
+    }
+    if (def.name == "ARM" && !field.is_string && !field.is_array) {
+      if (field.label == "ArmState") {
+        def.arm.state = static_cast<int>(i);
+      } else if (field.label == "ArmChecks") {
+        def.arm.checks = static_cast<int>(i);
+      } else if (field.label == "Forced") {
+        def.arm.forced = static_cast<int>(i);
+      } else if (field.label == "Method") {
+        def.arm.method = static_cast<int>(i);
+      }
     }
 
     offset += field.byte_size;
@@ -543,51 +561,12 @@ bool Parser::parseDataPacket(const uint8_t* payload, MessageDef& def) {
   if (def.timestamp_idx >= 0) {
     last_timestamp_us_ = readLe<uint64_t>(payload + def.fields[static_cast<size_t>(def.timestamp_idx)].offset);
   }
-  const auto timestamp_ns = static_cast<int64_t>(last_timestamp_us_ * 1000U);
+  const int64_t timestamp_ns = lastTimestampNs();
 
-  // Extract MSG text and store with timestamp
   if (def.name == "MSG") {
-    int severity = -1;  // only newer firmware logs a level; most MSG rows carry none
-    for (const auto& field : def.fields) {
-      if (field.label == "Severity" && !field.is_string && !field.is_array) {
-        severity = static_cast<int>(decodeDouble(payload + field.offset, field.fmt_char));
-      }
-    }
-    for (const auto& field : def.fields) {
-      if (field.label == "Message" && field.is_string) {
-        std::string text = readCString(payload + field.offset, field.byte_size);
-        if (!text.empty()) {
-          vehicle_detector_.offerMessage(text);
-          msg_log_.push_back({static_cast<double>(last_timestamp_us_) * 1e-6, std::move(text), timestamp_ns, severity});
-        }
-        break;
-      }
-    }
-  }
-
-  if (def.name == "ARM") {
-    ArmChange change;
-    change.timestamp_ns = timestamp_ns;
-    bool has_state = false;
-    for (const auto& field : def.fields) {
-      if (field.is_string || field.is_array) {
-        continue;
-      }
-      const double value = decodeDouble(payload + field.offset, field.fmt_char);
-      if (field.label == "ArmState") {
-        change.armed = value != 0.0;
-        has_state = true;
-      } else if (field.label == "ArmChecks") {
-        change.checks = static_cast<uint32_t>(value);
-      } else if (field.label == "Forced") {
-        change.forced = value != 0.0;
-      } else if (field.label == "Method") {
-        change.method = static_cast<int>(value);
-      }
-    }
-    if (has_state) {
-      arm_changes_.push_back(change);
-    }
+    collectMessage(payload, def);
+  } else if (def.name == "ARM") {
+    collectArm(payload, def);
   }
 
   if (def.stats_idx >= 0) {
@@ -595,6 +574,7 @@ bool Parser::parseDataPacket(const uint8_t* payload, MessageDef& def) {
   }
 
   if (!sink_) {
+    bufferMode(payload, def, kNoGroup, nullptr, 0);
     return true;
   }
 
@@ -622,15 +602,67 @@ bool Parser::parseDataPacket(const uint8_t* payload, MessageDef& def) {
   // MODE is named once the whole log has been read: the VER / MSG that identify the vehicle can come after it, and
   // one log must not be named by two different rule sets.
   if (def.mode_idx >= 0) {
-    const int mode = payload[def.fields[static_cast<size_t>(def.mode_idx)].offset];
-    const int reason =
-        def.mode_reason_idx >= 0 ? payload[def.fields[static_cast<size_t>(def.mode_reason_idx)].offset] : -1;
-    deferred_modes_.add(group, timestamp_ns, mode, reason, values.data(), count);
+    bufferMode(payload, def, group, values.data(), count);
     return true;
   }
 
   total_samples_ += count;
   return sink_->append(group, timestamp_ns, values.data(), count);
+}
+
+void Parser::collectMessage(const uint8_t* payload, const MessageDef& def) {
+  if (def.msg_text_idx < 0) {
+    return;
+  }
+  const FieldDef& text_field = def.fields[static_cast<size_t>(def.msg_text_idx)];
+  std::string text = readCString(payload + text_field.offset, text_field.byte_size);
+  if (text.empty()) {
+    return;
+  }
+  int severity = -1;
+  if (def.msg_severity_idx >= 0) {
+    const FieldDef& field = def.fields[static_cast<size_t>(def.msg_severity_idx)];
+    severity = static_cast<int>(decodeDouble(payload + field.offset, field.fmt_char));
+  }
+  vehicle_detector_.offerMessage(text);
+  msg_log_.push_back({lastTimestampNs(), std::move(text), severity});
+}
+
+void Parser::collectArm(const uint8_t* payload, const MessageDef& def) {
+  if (def.arm.state < 0) {
+    return;
+  }
+  const auto read = [&](int idx) {
+    const FieldDef& field = def.fields[static_cast<size_t>(idx)];
+    return decodeDouble(payload + field.offset, field.fmt_char);
+  };
+  ArmChange change;
+  change.timestamp_ns = lastTimestampNs();
+  change.armed = read(def.arm.state) != 0.0;
+  if (def.arm.checks >= 0) {
+    change.checks = static_cast<uint32_t>(read(def.arm.checks));
+  }
+  if (def.arm.forced >= 0) {
+    change.forced = read(def.arm.forced) != 0.0;
+  }
+  if (def.arm.method >= 0) {
+    change.method = static_cast<int>(read(def.arm.method));
+  }
+  arm_changes_.push_back(change);
+}
+
+void Parser::bufferMode(
+    const uint8_t* payload, const MessageDef& def, size_t group, const SampleValue* values, size_t count) {
+  if (def.mode_idx < 0) {
+    return;
+  }
+  const int mode = payload[def.fields[static_cast<size_t>(def.mode_idx)].offset];
+  int reason = -1;
+  if (def.mode_reason_idx >= 0) {
+    const FieldDef& field = def.fields[static_cast<size_t>(def.mode_reason_idx)];
+    reason = static_cast<int>(decodeDouble(payload + field.offset, field.fmt_char));
+  }
+  deferred_modes_.add(group, lastTimestampNs(), mode, reason, values, count);
 }
 
 void Parser::collectVehicleEvidence(const uint8_t* payload, const MessageDef& def) {

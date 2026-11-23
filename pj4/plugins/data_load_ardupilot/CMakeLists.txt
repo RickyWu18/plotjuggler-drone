@@ -18,3 +18,11 @@ pj_embed_file(data_load_ardupilot
   HEADER   generated/ardupilot_info_ui.hpp
   VAR_NAME kArdupilotInfoUi
 )
+
+if(PJ_BUILD_TESTS)
+  # The marker builder is plain C++ over the parser's output, so it is tested without a host.
+  add_executable(data_load_ardupilot_test tests/ardupilot_markers_test.cpp ardupilot_markers.cpp)
+  target_compile_options(data_load_ardupilot_test PRIVATE ${PJ_WARNING_FLAGS})
+  target_link_libraries(data_load_ardupilot_test PRIVATE plotjuggler_sdk::plugin_sdk pj_drone::core GTest::gtest_main)
+  add_test(NAME data_load_ardupilot_test COMMAND data_load_ardupilot_test)
+endif()

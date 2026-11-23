@@ -553,7 +553,7 @@ TEST(ArdupilotParser, CollectsParametersMessagesAndFilesWithoutSink) {
   EXPECT_DOUBLE_EQ(parser.parameters()[0].value, 0.75);  // last value wins
 
   ASSERT_EQ(parser.logMessages().size(), 1U);
-  EXPECT_DOUBLE_EQ(parser.logMessages()[0].timestamp, 1.5);
+  EXPECT_DOUBLE_EQ(parser.logMessages()[0].seconds(), 1.5);
   EXPECT_EQ(parser.logMessages()[0].message, "Arming checks passed");
 
   ASSERT_EQ(parser.embeddedFiles().size(), 1U);
@@ -843,4 +843,34 @@ TEST(ArdupilotParser, MsgSeverityFieldIsReadWhenTheLogHasOne) {
 
   ASSERT_EQ(parser.logMessages().size(), 1U);
   EXPECT_EQ(parser.logMessages()[0].severity, 3);
+}
+
+TEST(ArdupilotParser, ModeChangesAreCollectedWithoutASink) {
+  std::vector<uint8_t> log;
+  defineModeLog(log);
+  msgText(log, "ArduPlane V4.5.0 (abc)");
+  modeRecord(log, 5);
+
+  Parser parser(log.data(), log.size(), {}, nullptr);
+
+  ASSERT_EQ(parser.modeChanges().size(), 1U);
+  EXPECT_EQ(parser.modeChanges()[0].mode, 5);
+  EXPECT_EQ(parser.modeChanges()[0].name, "FBWA");
+}
+
+TEST(ArdupilotParser, ArmWithoutMethodKeepsNoMethod) {
+  // ARM: "QB" TimeUS,ArmState  (3 + 8 + 1 = 12 bytes)
+  std::vector<uint8_t> log;
+  fmt(log, 140, 12, "ARM", "QB", "TimeUS,ArmState");
+  header(log, 140);
+  put<uint64_t>(log, 3000000);
+  put<uint8_t>(log, 1);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  ASSERT_EQ(parser.armChanges().size(), 1U);
+  EXPECT_TRUE(parser.armChanges()[0].armed);
+  EXPECT_EQ(parser.armChanges()[0].method, -1);
+  EXPECT_EQ(parser.armChanges()[0].checks, 0U);
 }

@@ -138,7 +138,7 @@ ArdupilotInfoDialog::ArdupilotInfoDialog(
   mtable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
 
   for (int row = 0; row < static_cast<int>(msgs.size()); row++) {
-    auto* tsItem = new QTableWidgetItem(QString::fromStdString(ap::formatMessageTimestamp(msgs[row].timestamp)));
+    auto* tsItem = new QTableWidgetItem(QString::fromStdString(ap::formatMessageTimestamp(msgs[row].seconds())));
     tsItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     mtable->setItem(row, 0, tsItem);
     mtable->setItem(row, 1, new QTableWidgetItem(QString::fromStdString(msgs[row].message)));
