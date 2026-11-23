@@ -1,7 +1,7 @@
 # pugixml is used by pj_drone::core (it reads the user's MAVLink XML mode files when it finds pugixml); required here
 # so that this plugin is never built with that feature silently switched off.
 find_package(pugixml REQUIRED)
-add_library(data_load_ardupilot SHARED ardupilot_source.cpp ardupilot_dialog.cpp mode_overrides.cpp)
+add_library(data_load_ardupilot SHARED ardupilot_source.cpp ardupilot_dialog.cpp ardupilot_markers.cpp mode_overrides.cpp)
 target_compile_options(data_load_ardupilot PRIVATE ${PJ_WARNING_FLAGS})
 target_link_libraries(data_load_ardupilot PRIVATE
   plotjuggler_sdk::plugin_sdk
@@ -18,3 +18,11 @@ pj_embed_file(data_load_ardupilot
   HEADER   generated/ardupilot_info_ui.hpp
   VAR_NAME kArdupilotInfoUi
 )
+
+if(PJ_BUILD_TESTS)
+  # The marker builder is plain C++ over the parser's output, so it is tested without a host.
+  add_executable(data_load_ardupilot_test tests/ardupilot_markers_test.cpp ardupilot_markers.cpp)
+  target_compile_options(data_load_ardupilot_test PRIVATE ${PJ_WARNING_FLAGS})
+  target_link_libraries(data_load_ardupilot_test PRIVATE plotjuggler_sdk::plugin_sdk pj_drone::core GTest::gtest_main)
+  add_test(NAME data_load_ardupilot_test COMMAND data_load_ardupilot_test)
+endif()
