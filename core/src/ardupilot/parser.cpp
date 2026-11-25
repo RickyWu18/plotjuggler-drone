@@ -56,10 +56,7 @@ Parser::Parser(const uint8_t* data, size_t length, ParserOptions options, Sample
   mult_table_['/'] = 3600.0;
 
   if (options_.apply_gps_time) {
-    GpsTimeOffset gps;
-    if (findGpsTimeOffset(data_, length_, &gps)) {
-      gps_offset_ns_ = gps.offset_ns;
-    }
+    gps_offset_ns_ = findGpsOffsetNs(data_, length_).value_or(0);
   }
 
   parse();
@@ -291,15 +288,6 @@ Parser::MessageDef Parser::buildMessageDef(const uint8_t* payload86) {
 
     if (c == 'Q' && field.label == "TimeUS") {
       def.timestamp_idx = static_cast<int>(i);
-    }
-    if (def.name == "GPS") {
-      if (field.label == "Status" && (c == 'B' || c == 'M')) {
-        def.gps.status = static_cast<int>(i);
-      } else if (field.label == "GMS" && c == 'I') {
-        def.gps.ms = static_cast<int>(i);
-      } else if (field.label == "GWk" && c == 'H') {
-        def.gps.week = static_cast<int>(i);
-      }
     }
 
     if ((c == 'B' || c == 'M') && (field.label == "I" || field.label == "Instance")) {
@@ -575,9 +563,10 @@ bool Parser::parseDataPacket(const uint8_t* payload, MessageDef& def) {
 
   // Timestamp is read from the raw bytes to keep the full uint64 precision.
   if (def.timestamp_idx >= 0) {
-    last_timestamp_us_ = readLe<uint64_t>(payload + def.fields[static_cast<size_t>(def.timestamp_idx)].offset);
+    const auto time_us = readLe<uint64_t>(payload + def.fields[static_cast<size_t>(def.timestamp_idx)].offset);
+    last_timestamp_ns_ = static_cast<int64_t>(time_us * 1000U) + gps_offset_ns_;
   }
-  const int64_t timestamp_ns = lastTimestampNs();
+  const int64_t timestamp_ns = last_timestamp_ns_;
 
   if (def.name == "MSG") {
     collectMessage(payload, def);
@@ -861,12 +850,12 @@ int64_t gpsToUnixNs(uint16_t week, uint32_t ms_of_week) {
   return unix_seconds * 1'000'000'000 + int64_t{ms_of_week % 1000} * 1'000'000;
 }
 
-bool findGpsTimeOffset(const uint8_t* data, size_t length, GpsTimeOffset* out) {
+std::optional<int64_t> Parser::findGpsOffsetNs(const uint8_t* data, size_t length) {
   constexpr uint8_t kGpsFixed3D = 3;  // GPS_OK_FIX_3D
   constexpr uint32_t kMsPerWeek = 604800000;
 
-  std::array<Parser::MessageDef, 256> defs;
-  std::array<bool, 256> valid{};
+  std::array<MessageDef, 256> defs;
+  bool valid[256] = {};
   size_t pos = 0;
   while (pos + 3 <= length) {
     if (data[pos] != kHeadByte1 || data[pos + 1] != kHeadByte2) {
@@ -880,7 +869,7 @@ bool findGpsTimeOffset(const uint8_t* data, size_t length, GpsTimeOffset* out) {
       if (pos + kFmtPayloadLen > length) {
         break;
       }
-      Parser::MessageDef def = Parser::buildMessageDef(data + pos);
+      MessageDef def = buildMessageDef(data + pos);
       pos += kFmtPayloadLen;
       const uint8_t type = def.msg_type;
       defs[type] = std::move(def);
@@ -892,7 +881,7 @@ bool findGpsTimeOffset(const uint8_t* data, size_t length, GpsTimeOffset* out) {
       pos -= 2;
       continue;
     }
-    const Parser::MessageDef& def = defs[msgid];
+    const MessageDef& def = defs[msgid];
     const size_t payload_len = static_cast<size_t>(def.msg_len) - 3;
     if (pos + payload_len > length) {
       pos -= 2;
@@ -901,26 +890,36 @@ bool findGpsTimeOffset(const uint8_t* data, size_t length, GpsTimeOffset* out) {
     const uint8_t* payload = data + pos;
     pos += payload_len;
 
-    if (def.name != "GPS" || def.timestamp_idx < 0 || def.gps.status < 0 || def.gps.ms < 0 || def.gps.week < 0 ||
-        def.payload_size > payload_len) {
+    if (def.name != "GPS" || def.payload_size > payload_len) {
       continue;
     }
-    const auto field_at = [&](int idx) { return payload + def.fields[static_cast<size_t>(idx)].offset; };
-    const uint16_t week = readLe<uint16_t>(field_at(def.gps.week));
-    const uint32_t ms = readLe<uint32_t>(field_at(def.gps.ms));
-    if (payload[def.fields[static_cast<size_t>(def.gps.status)].offset] < kGpsFixed3D || week == 0 ||
-        ms >= kMsPerWeek) {
+    const auto field = [&](std::string_view label, char fmt_char) -> const uint8_t* {
+      for (const FieldDef& f : def.fields) {
+        if (f.label == label && f.fmt_char == fmt_char) {
+          return payload + f.offset;
+        }
+      }
+      return nullptr;
+    };
+    const uint8_t* time_us = field("TimeUS", 'Q');
+    const uint8_t* status = field("Status", 'B') != nullptr ? field("Status", 'B') : field("Status", 'M');
+    const uint8_t* ms = field("GMS", 'I');
+    const uint8_t* week = field("GWk", 'H');
+    if (time_us == nullptr || status == nullptr || ms == nullptr || week == nullptr) {
       continue;
     }
-    const uint64_t time_us = readLe<uint64_t>(field_at(def.timestamp_idx));
-    const int64_t offset = gpsToUnixNs(week, ms) - static_cast<int64_t>(time_us * 1000U);
-    if (offset <= 0) {
+
+    const auto row_week = readLe<uint16_t>(week);
+    const auto row_ms = readLe<uint32_t>(ms);
+    if (*status < kGpsFixed3D || row_week == 0 || row_ms >= kMsPerWeek) {
       continue;
     }
-    out->offset_ns = offset;
-    return true;
+    const int64_t offset = gpsToUnixNs(row_week, row_ms) - static_cast<int64_t>(readLe<uint64_t>(time_us) * 1000U);
+    if (offset > 0) {
+      return offset;
+    }
   }
-  return false;
+  return std::nullopt;
 }
 
 std::string sanitizeFileName(std::string_view raw) {
