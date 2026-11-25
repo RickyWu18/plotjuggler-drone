@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- When the log has a valid GPS time (first `GPS` row with a 3D fix, a non-zero `GWk` and a `GMS` inside the week), all
+  timestamps, including the markers, are UTC seconds since the Unix epoch instead of seconds since boot. GPS time is
+  converted with the leap seconds in force on the log's date (IERS list built in); a log without a valid GPS row keeps the boot clock.
 - `MSG`, `MODE` and `ARM` are also published as plot markers, on a new topic `_markers`. Each field of it is a series
   of NaN (it draws nothing and stays out of the axis range) with the marker set addressed to it; drag a field onto a
   plot to see its markers there (the curve's "show markers" flag hides them again):

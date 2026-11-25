@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -95,6 +96,13 @@ struct ArmChange {
   int method = -1;      // "Method": what triggered the change (AP_Arming::Method); -1 when the log has none
 };
 
+/// GPS time minus UTC, in whole seconds, at `gps_seconds` (seconds since the GPS epoch 1980-01-06). Taken from the
+/// IERS leap-second list (0 before 1981-07-01, 18 since 2017-01-01).
+int leapSecondsAtGps(int64_t gps_seconds);
+
+/// The GPS time of `week` / `ms_of_week` as nanoseconds since the Unix epoch (UTC).
+int64_t gpsToUnixNs(uint16_t week, uint32_t ms_of_week);
+
 struct MessageStats {
   std::string name;
   uint64_t count = 0;
@@ -105,6 +113,7 @@ struct ParserOptions {
 
   bool load_files = true;        // index embedded FILE messages (content is only assembled on export)
   bool hash_instance = false;    // "GPS/#0" instead of "GPS/0"
+  bool apply_gps_time = false;   // use UTC timestamps when the log has a valid GPS time, else the boot clock
   ModeOverrides mode_overrides;  // complete mode enums; the first one matching the log replaces the built-in tables
   ProgressCallback progress;
 };
@@ -145,9 +154,9 @@ class Parser {
   VehicleInfo vehicle() const {
     return vehicle_detector_.info();
   }
-  /// Timestamp of the last message that carries one, in nanoseconds since boot; 0 when none did.
+  /// Timestamp of the last message that carries one, in nanoseconds (boot clock or UTC); 0 when none did.
   int64_t lastTimestampNs() const {
-    return static_cast<int64_t>(last_timestamp_us_ * 1000U);
+    return last_timestamp_ns_;
   }
   size_t totalSamples() const {
     return total_samples_;
@@ -204,6 +213,9 @@ class Parser {
     char multipliers[16] = {};
   };
 
+  /// Offset from the boot clock to UTC, from the first GPS row with a valid GPS time; nullopt when the log has none.
+  static std::optional<int64_t> findGpsOffsetNs(const uint8_t* data, size_t length);
+
   void parse();
   bool parseSinglePass();
   void finalizeDef(MessageDef& def);
@@ -254,7 +266,8 @@ class Parser {
   int fmtu_msg_type_ = -1;
   int file_msg_type_ = -1;
 
-  uint64_t last_timestamp_us_ = 0;
+  int64_t last_timestamp_ns_ = 0;
+  int64_t gps_offset_ns_ = 0;  // added to every timestamp; 0 on the boot clock
 
   std::vector<MessageStats> stats_;
   size_t total_samples_ = 0;

@@ -200,6 +200,7 @@ class ArdupilotSource : public PJ::FileSourceBase {
     ap::ParserOptions options;
     options.load_files = false;
     options.hash_instance = false;
+    options.apply_gps_time = true;  // a log with a valid GPS time is plotted on the UTC clock
     options.mode_overrides = dialog_.modeOverrides();
     options.progress = [this](size_t pos, size_t /*total*/) {
       (void)runtimeHost().progressUpdate(pos);
