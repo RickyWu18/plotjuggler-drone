@@ -102,6 +102,7 @@ bool DataLoadArdupilot::readDataFromFile(PJ::FileLoadInfo* info, PJ::PlotDataMap
   ap::ParserOptions options;
   options.load_files = load_files;
   options.hash_instance = official_compat;
+  options.apply_gps_time = true;
   options.progress = [&](size_t pos, size_t total) -> bool {
     if (parse_timer.elapsed() < 50) {
       return true;
