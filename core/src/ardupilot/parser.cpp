@@ -59,7 +59,6 @@ Parser::Parser(const uint8_t* data, size_t length, ParserOptions options, Sample
     GpsTimeOffset gps;
     if (findGpsTimeOffset(data_, length_, &gps)) {
       gps_offset_ns_ = gps.offset_ns;
-      gps_time_applied_ = true;
     }
   }
 

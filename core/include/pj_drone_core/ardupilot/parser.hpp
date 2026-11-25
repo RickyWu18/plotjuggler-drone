@@ -119,11 +119,9 @@ struct MessageStats {
 struct ParserOptions {
   using ProgressCallback = std::function<bool(size_t pos, size_t total)>;  // return false to cancel
 
-  bool load_files = true;      // index embedded FILE messages (content is only assembled on export)
-  bool hash_instance = false;  // "GPS/#0" instead of "GPS/0"
-  /// Put every timestamp on the UTC clock (nanoseconds since the Unix epoch) when the log has a valid GPS time (see
-  /// findGpsTimeOffset()). A log without one keeps the boot clock; gpsTimeApplied() tells which happened.
-  bool apply_gps_time = false;
+  bool load_files = true;        // index embedded FILE messages (content is only assembled on export)
+  bool hash_instance = false;    // "GPS/#0" instead of "GPS/0"
+  bool apply_gps_time = false;   // use UTC timestamps when the log has a valid GPS time, else the boot clock
   ModeOverrides mode_overrides;  // complete mode enums; the first one matching the log replaces the built-in tables
   ProgressCallback progress;
 };
@@ -167,10 +165,6 @@ class Parser {
   /// Timestamp of the last message that carries one, in nanoseconds since boot; 0 when none did.
   int64_t lastTimestampNs() const {
     return last_timestamp_us_ == 0 ? 0 : static_cast<int64_t>(last_timestamp_us_ * 1000U) + gps_offset_ns_;
-  }
-  /// True when ParserOptions::apply_gps_time found a valid GPS time: every timestamp is UTC since the Unix epoch.
-  bool gpsTimeApplied() const {
-    return gps_time_applied_;
   }
   size_t totalSamples() const {
     return total_samples_;
@@ -286,7 +280,6 @@ class Parser {
 
   uint64_t last_timestamp_us_ = 0;
   int64_t gps_offset_ns_ = 0;  // added to every timestamp; 0 on the boot clock
-  bool gps_time_applied_ = false;
 
   std::vector<MessageStats> stats_;
   size_t total_samples_ = 0;

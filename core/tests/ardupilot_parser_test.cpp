@@ -913,7 +913,6 @@ TEST(ArdupilotParser, GpsTimeMovesEveryTimestampToUtc) {
   RecordingSink sink;
   Parser parser(log.data(), log.size(), gpsOptions(), &sink);
 
-  EXPECT_TRUE(parser.gpsTimeApplied());
   ASSERT_EQ(sink.rows.size(), 3U);
   EXPECT_EQ(sink.rows[0].ts_ns, kUtcAtGpsRow - 5'000'000'000);
   EXPECT_EQ(sink.rows[1].ts_ns, kUtcAtGpsRow);
@@ -929,7 +928,6 @@ TEST(ArdupilotParser, GpsTimeIsOffByDefault) {
   RecordingSink sink;
   Parser parser(log.data(), log.size(), {}, &sink);
 
-  EXPECT_FALSE(parser.gpsTimeApplied());
   EXPECT_EQ(sink.rows[0].ts_ns, 10'000'000'000);
 }
 
@@ -943,7 +941,6 @@ TEST(ArdupilotParser, GpsRowsWithoutAValidTimeKeepTheBootClock) {
   RecordingSink sink;
   Parser parser(log.data(), log.size(), gpsOptions(), &sink);
 
-  EXPECT_FALSE(parser.gpsTimeApplied());
   ASSERT_EQ(sink.rows.size(), 3U);
   EXPECT_EQ(sink.rows[0].ts_ns, 1'000'000'000);
   EXPECT_EQ(sink.rows[2].ts_ns, 3'000'000'000);
@@ -959,7 +956,7 @@ TEST(ArdupilotParser, FirstValidGpsRowDecidesTheOffset) {
   RecordingSink sink;
   Parser parser(log.data(), log.size(), gpsOptions(), &sink);
 
-  ASSERT_TRUE(parser.gpsTimeApplied());
+  ASSERT_EQ(sink.rows.size(), 3U);
   EXPECT_EQ(sink.rows[1].ts_ns, kUtcAtGpsRow + 250'000'000);
 }
 
