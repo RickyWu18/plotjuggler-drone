@@ -874,3 +874,106 @@ TEST(ArdupilotParser, ArmWithoutMethodKeepsNoMethod) {
   EXPECT_EQ(parser.armChanges()[0].method, -1);
   EXPECT_EQ(parser.armChanges()[0].checks, 0U);
 }
+
+// ---- GPS time ----------------------------------------------------------------------------------------------------
+
+namespace {
+
+// GPS: type 131, "QBIH" TimeUS,Status,GMS,GWk  (3 + 8 + 1 + 4 + 2 = 18 bytes)
+void defineGps(std::vector<uint8_t>& out) {
+  fmt(out, 131, 18, "GPS", "QBIH", "TimeUS,Status,GMS,GWk");
+}
+void gps(std::vector<uint8_t>& out, uint64_t us, uint8_t status, uint32_t ms, uint16_t week) {
+  header(out, 131);
+  put(out, us);
+  put(out, status);
+  put(out, ms);
+  put(out, week);
+}
+
+// Week 2400, 3600 s into it: 1980-01-06 + 2400 weeks + 1 h, less 18 leap seconds.
+constexpr int64_t kUtcAtGpsRow = int64_t{315964800 + 2400 * 604800 + 3600 - 18} * 1'000'000'000;
+
+ParserOptions gpsOptions() {
+  ParserOptions options;
+  options.apply_gps_time = true;
+  return options;
+}
+
+}  // namespace
+
+TEST(ArdupilotParser, GpsTimeMovesEveryTimestampToUtc) {
+  std::vector<uint8_t> log;
+  defineAtt(log);
+  defineGps(log);
+  att(log, 5'000'000, 0.F, 0.F);  // before the GPS row: shifted all the same
+  gps(log, 10'000'000, 3, 3'600'000, 2400);
+  att(log, 20'000'000, 0.F, 0.F);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), gpsOptions(), &sink);
+
+  EXPECT_TRUE(parser.gpsTimeApplied());
+  ASSERT_EQ(sink.rows.size(), 3U);
+  EXPECT_EQ(sink.rows[0].ts_ns, kUtcAtGpsRow - 5'000'000'000);
+  EXPECT_EQ(sink.rows[1].ts_ns, kUtcAtGpsRow);
+  EXPECT_EQ(sink.rows[2].ts_ns, kUtcAtGpsRow + 10'000'000'000);
+  EXPECT_EQ(parser.lastTimestampNs(), kUtcAtGpsRow + 10'000'000'000);
+}
+
+TEST(ArdupilotParser, GpsTimeIsOffByDefault) {
+  std::vector<uint8_t> log;
+  defineGps(log);
+  gps(log, 10'000'000, 3, 3'600'000, 2400);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+
+  EXPECT_FALSE(parser.gpsTimeApplied());
+  EXPECT_EQ(sink.rows[0].ts_ns, 10'000'000'000);
+}
+
+TEST(ArdupilotParser, GpsRowsWithoutAValidTimeKeepTheBootClock) {
+  std::vector<uint8_t> log;
+  defineGps(log);
+  gps(log, 1'000'000, 2, 3'600'000, 2400);    // no 3D fix
+  gps(log, 2'000'000, 3, 3'600'000, 0);       // no week yet
+  gps(log, 3'000'000, 3, 604'800'000, 2400);  // millisecond outside the week
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), gpsOptions(), &sink);
+
+  EXPECT_FALSE(parser.gpsTimeApplied());
+  ASSERT_EQ(sink.rows.size(), 3U);
+  EXPECT_EQ(sink.rows[0].ts_ns, 1'000'000'000);
+  EXPECT_EQ(sink.rows[2].ts_ns, 3'000'000'000);
+}
+
+TEST(ArdupilotParser, FirstValidGpsRowDecidesTheOffset) {
+  std::vector<uint8_t> log;
+  defineGps(log);
+  gps(log, 1'000'000, 1, 0, 0);
+  gps(log, 10'000'000, 4, 3'600'250, 2400);
+  gps(log, 20'000'000, 3, 3'700'000, 2400);
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), gpsOptions(), &sink);
+
+  ASSERT_TRUE(parser.gpsTimeApplied());
+  EXPECT_EQ(sink.rows[1].ts_ns, kUtcAtGpsRow + 250'000'000);
+}
+
+TEST(ArdupilotParser, LeapSecondsFollowTheGpsDate) {
+  const auto gps_seconds = [](int64_t unix_utc, int leap) { return unix_utc + leap - 315964800; };
+  EXPECT_EQ(leapSecondsAtGps(0), 0);                                 // 1980-01-06
+  EXPECT_EQ(leapSecondsAtGps(gps_seconds(1341100800 - 1, 15)), 15);  // 2012-06-30T23:59:59Z
+  EXPECT_EQ(leapSecondsAtGps(gps_seconds(1341100800, 16)), 16);      // 2012-07-01T00:00:00Z
+  EXPECT_EQ(leapSecondsAtGps(gps_seconds(1483228800 - 1, 17)), 17);  // 2016-12-31T23:59:59Z
+  EXPECT_EQ(leapSecondsAtGps(gps_seconds(1483228800, 18)), 18);      // 2017-01-01T00:00:00Z
+}
+
+TEST(ArdupilotParser, GpsTimeBeforeTheFirstLeapSecondIsNotShifted) {
+  // GPS week 100 (1981-12): 1 leap second so far; week 0 + 1 s: none.
+  EXPECT_EQ(gpsToUnixNs(0, 1000), int64_t{315964800 + 1} * 1'000'000'000);
+  EXPECT_EQ(gpsToUnixNs(100, 0), int64_t{315964800 + 100 * 604800 - 1} * 1'000'000'000);
+}

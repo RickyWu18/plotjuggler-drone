@@ -95,6 +95,22 @@ struct ArmChange {
   int method = -1;      // "Method": what triggered the change (AP_Arming::Method); -1 when the log has none
 };
 
+/// Offset that turns a boot-clock timestamp into UTC: utc_ns = TimeUS * 1000 + offset_ns.
+struct GpsTimeOffset {
+  int64_t offset_ns = 0;
+};
+
+/// GPS time minus UTC, in whole seconds, at `gps_seconds` (seconds since the GPS epoch 1980-01-06). Taken from the
+/// IERS leap-second list (0 before 1981-07-01, 18 since 2017-01-01).
+int leapSecondsAtGps(int64_t gps_seconds);
+
+/// The GPS time of `week` / `ms_of_week` as nanoseconds since the Unix epoch (UTC).
+int64_t gpsToUnixNs(uint16_t week, uint32_t ms_of_week);
+
+/// Scans `data` for the first GPS row with a 3D fix (Status >= 3), a non-zero week and a millisecond of week inside
+/// the week, and returns the offset between its TimeUS and its GPS time. Returns false when the log has none.
+bool findGpsTimeOffset(const uint8_t* data, size_t length, GpsTimeOffset* out);
+
 struct MessageStats {
   std::string name;
   uint64_t count = 0;
@@ -103,8 +119,11 @@ struct MessageStats {
 struct ParserOptions {
   using ProgressCallback = std::function<bool(size_t pos, size_t total)>;  // return false to cancel
 
-  bool load_files = true;        // index embedded FILE messages (content is only assembled on export)
-  bool hash_instance = false;    // "GPS/#0" instead of "GPS/0"
+  bool load_files = true;      // index embedded FILE messages (content is only assembled on export)
+  bool hash_instance = false;  // "GPS/#0" instead of "GPS/0"
+  /// Put every timestamp on the UTC clock (nanoseconds since the Unix epoch) when the log has a valid GPS time (see
+  /// findGpsTimeOffset()). A log without one keeps the boot clock; gpsTimeApplied() tells which happened.
+  bool apply_gps_time = false;
   ModeOverrides mode_overrides;  // complete mode enums; the first one matching the log replaces the built-in tables
   ProgressCallback progress;
 };
@@ -147,7 +166,11 @@ class Parser {
   }
   /// Timestamp of the last message that carries one, in nanoseconds since boot; 0 when none did.
   int64_t lastTimestampNs() const {
-    return static_cast<int64_t>(last_timestamp_us_ * 1000U);
+    return last_timestamp_us_ == 0 ? 0 : static_cast<int64_t>(last_timestamp_us_ * 1000U) + gps_offset_ns_;
+  }
+  /// True when ParserOptions::apply_gps_time found a valid GPS time: every timestamp is UTC since the Unix epoch.
+  bool gpsTimeApplied() const {
+    return gps_time_applied_;
   }
   size_t totalSamples() const {
     return total_samples_;
@@ -157,6 +180,8 @@ class Parser {
   }
 
  private:
+  friend bool findGpsTimeOffset(const uint8_t* data, size_t length, GpsTimeOffset* out);
+
   static constexpr size_t kNoGroup = std::numeric_limits<size_t>::max();
   static constexpr size_t kMaxFields = 16;
 
@@ -192,6 +217,11 @@ class Parser {
       int forced = -1;
       int method = -1;
     } arm;
+    struct GpsIdx {  // GPS fields that give the UTC time
+      int status = -1;
+      int ms = -1;
+      int week = -1;
+    } gps;
     std::vector<size_t> delivered_idx;  // indices of the fields that are delivered to the sink
     size_t group = kNoGroup;            // non-instance messages
     std::unordered_map<int, size_t> instance_groups;
@@ -255,6 +285,8 @@ class Parser {
   int file_msg_type_ = -1;
 
   uint64_t last_timestamp_us_ = 0;
+  int64_t gps_offset_ns_ = 0;  // added to every timestamp; 0 on the boot clock
+  bool gps_time_applied_ = false;
 
   std::vector<MessageStats> stats_;
   size_t total_samples_ = 0;

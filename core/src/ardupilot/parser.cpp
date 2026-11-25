@@ -55,6 +55,14 @@ Parser::Parser(const uint8_t* data, size_t length, ParserOptions options, Sample
   mult_table_['!'] = 3.6;
   mult_table_['/'] = 3600.0;
 
+  if (options_.apply_gps_time) {
+    GpsTimeOffset gps;
+    if (findGpsTimeOffset(data_, length_, &gps)) {
+      gps_offset_ns_ = gps.offset_ns;
+      gps_time_applied_ = true;
+    }
+  }
+
   parse();
 }
 
@@ -284,6 +292,15 @@ Parser::MessageDef Parser::buildMessageDef(const uint8_t* payload86) {
 
     if (c == 'Q' && field.label == "TimeUS") {
       def.timestamp_idx = static_cast<int>(i);
+    }
+    if (def.name == "GPS") {
+      if (field.label == "Status" && (c == 'B' || c == 'M')) {
+        def.gps.status = static_cast<int>(i);
+      } else if (field.label == "GMS" && c == 'I') {
+        def.gps.ms = static_cast<int>(i);
+      } else if (field.label == "GWk" && c == 'H') {
+        def.gps.week = static_cast<int>(i);
+      }
     }
 
     if ((c == 'B' || c == 'M') && (field.label == "I" || field.label == "Instance")) {
@@ -792,6 +809,119 @@ void Parser::parseFilePacket(const uint8_t* payload, const MessageDef& def) {
   chunk.length = static_cast<uint8_t>(chunk_len);
   chunk.log_pos = static_cast<size_t>(data_ptr - data_);
   file_chunks_[filename].push_back(chunk);
+}
+
+namespace {
+
+constexpr int64_t kGpsEpochUnixSeconds = 315964800;  // 1980-01-06T00:00:00Z
+
+// Days from 1970-01-01 to a civil date (Howard Hinnant's days_from_civil).
+constexpr int64_t daysFromCivil(int64_t y, int64_t m, int64_t d) {
+  y -= m <= 2 ? 1 : 0;
+  const int64_t era = (y >= 0 ? y : y - 399) / 400;
+  const int64_t yoe = y - era * 400;
+  const int64_t doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  const int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + doe - 719468;
+}
+
+constexpr int64_t unixAt(int64_t y, int64_t m, int64_t d) {
+  return daysFromCivil(y, m, d) * 86400;
+}
+
+// IERS leap seconds: from this UTC day on, GPS time is `gps_minus_utc` seconds ahead of UTC.
+struct LeapSecond {
+  int64_t utc_unix;
+  int gps_minus_utc;
+};
+constexpr LeapSecond kLeapSeconds[] = {
+    {unixAt(1981, 7, 1), 1},  {unixAt(1982, 7, 1), 2},  {unixAt(1983, 7, 1), 3},  {unixAt(1985, 7, 1), 4},
+    {unixAt(1988, 1, 1), 5},  {unixAt(1990, 1, 1), 6},  {unixAt(1991, 1, 1), 7},  {unixAt(1992, 7, 1), 8},
+    {unixAt(1993, 7, 1), 9},  {unixAt(1994, 7, 1), 10}, {unixAt(1996, 1, 1), 11}, {unixAt(1997, 7, 1), 12},
+    {unixAt(1999, 1, 1), 13}, {unixAt(2006, 1, 1), 14}, {unixAt(2009, 1, 1), 15}, {unixAt(2012, 7, 1), 16},
+    {unixAt(2015, 7, 1), 17}, {unixAt(2017, 1, 1), 18},
+};
+
+}  // namespace
+
+int leapSecondsAtGps(int64_t gps_seconds) {
+  int result = 0;
+  for (const LeapSecond& leap : kLeapSeconds) {
+    // At the start of the day the new offset takes effect, GPS time reads UTC + the new offset.
+    if (gps_seconds + kGpsEpochUnixSeconds >= leap.utc_unix + leap.gps_minus_utc) {
+      result = leap.gps_minus_utc;
+    }
+  }
+  return result;
+}
+
+int64_t gpsToUnixNs(uint16_t week, uint32_t ms_of_week) {
+  constexpr int64_t kSecondsPerWeek = 604800;
+  const int64_t gps_seconds = int64_t{week} * kSecondsPerWeek + int64_t{ms_of_week} / 1000;
+  const int64_t unix_seconds = kGpsEpochUnixSeconds + gps_seconds - leapSecondsAtGps(gps_seconds);
+  return unix_seconds * 1'000'000'000 + int64_t{ms_of_week % 1000} * 1'000'000;
+}
+
+bool findGpsTimeOffset(const uint8_t* data, size_t length, GpsTimeOffset* out) {
+  constexpr uint8_t kGpsFixed3D = 3;  // GPS_OK_FIX_3D
+  constexpr uint32_t kMsPerWeek = 604800000;
+
+  std::array<Parser::MessageDef, 256> defs;
+  std::array<bool, 256> valid{};
+  size_t pos = 0;
+  while (pos + 3 <= length) {
+    if (data[pos] != kHeadByte1 || data[pos + 1] != kHeadByte2) {
+      pos++;
+      continue;
+    }
+    const uint8_t msgid = data[pos + 2];
+    pos += 3;
+
+    if (msgid == kFmtMsgId) {
+      if (pos + kFmtPayloadLen > length) {
+        break;
+      }
+      Parser::MessageDef def = Parser::buildMessageDef(data + pos);
+      pos += kFmtPayloadLen;
+      const uint8_t type = def.msg_type;
+      defs[type] = std::move(def);
+      valid[type] = true;
+      continue;
+    }
+
+    if (!valid[msgid] || defs[msgid].msg_len < 3) {
+      pos -= 2;
+      continue;
+    }
+    const Parser::MessageDef& def = defs[msgid];
+    const size_t payload_len = static_cast<size_t>(def.msg_len) - 3;
+    if (pos + payload_len > length) {
+      pos -= 2;
+      continue;
+    }
+    const uint8_t* payload = data + pos;
+    pos += payload_len;
+
+    if (def.name != "GPS" || def.timestamp_idx < 0 || def.gps.status < 0 || def.gps.ms < 0 || def.gps.week < 0 ||
+        def.payload_size > payload_len) {
+      continue;
+    }
+    const auto field_at = [&](int idx) { return payload + def.fields[static_cast<size_t>(idx)].offset; };
+    const uint16_t week = readLe<uint16_t>(field_at(def.gps.week));
+    const uint32_t ms = readLe<uint32_t>(field_at(def.gps.ms));
+    if (payload[def.fields[static_cast<size_t>(def.gps.status)].offset] < kGpsFixed3D || week == 0 ||
+        ms >= kMsPerWeek) {
+      continue;
+    }
+    const uint64_t time_us = readLe<uint64_t>(field_at(def.timestamp_idx));
+    const int64_t offset = gpsToUnixNs(week, ms) - static_cast<int64_t>(time_us * 1000U);
+    if (offset <= 0) {
+      continue;
+    }
+    out->offset_ns = offset;
+    return true;
+  }
+  return false;
 }
 
 std::string sanitizeFileName(std::string_view raw) {

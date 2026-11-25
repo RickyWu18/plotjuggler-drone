@@ -200,6 +200,7 @@ class ArdupilotSource : public PJ::FileSourceBase {
     ap::ParserOptions options;
     options.load_files = false;
     options.hash_instance = false;
+    options.apply_gps_time = true;  // a log with a valid GPS time is plotted on the UTC clock
     options.mode_overrides = dialog_.modeOverrides();
     options.progress = [this](size_t pos, size_t /*total*/) {
       (void)runtimeHost().progressUpdate(pos);
@@ -212,6 +213,10 @@ class ArdupilotSource : public PJ::FileSourceBase {
 
     if (parser.result() == ap::Parser::Result::kSinkError) {
       return PJ::unexpected(sink.error());
+    }
+    if (parser.gpsTimeApplied()) {
+      runtimeHost().reportMessage(
+          PJ::DataSourceMessageLevel::kInfo, "ArduPilot: timestamps are UTC (taken from the GPS time in the log)");
     }
     publishMarkers(parser);
     return PJ::okStatus();
