@@ -44,16 +44,12 @@ See each plugin's README for its feature list.
 
 #### Option A - Marketplace
 
-> **Coming soon:** Marketplace installation is being prepared.
-
-<!--
 1. **Install PlotJuggler 4.x.**
 2. **Open PlotJuggler 4.x Marketplace** at `File > Extensions Marketplace`.
-3. **Find and Install the plugins**
+3. **Find and Install the plugin**
    - **DataLoadArdupilot**: Ardupilot BIN Loader
-   - **DataStreamMavlink**: MAVLink streamer
-4. **Restart PlotJuggler.** The plugins will load in the new session.
--->
+   - **DataStreamMavlink**: MAVLink streamer — *coming soon, use Option B for now.*
+4. **Restart PlotJuggler.** The plugin will load in the new session.
 
 #### Option B - Install Locally
 
