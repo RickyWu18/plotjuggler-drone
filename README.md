@@ -14,28 +14,12 @@ PlotJuggler is a fast, open-source time-series visualization tool. This reposito
 
 ## Available Plugins
 
-| Plugin | Description | PJ3 support | PJ4 support |
+| Plugin | Description | PJ3 | PJ4 |
 |---|---|:---:|:---:|
-| **DataStreamMavlink** | Streams live MAVLink telemetry over UDP, TCP, or Serial into PlotJuggler. Automatically discovers all message fields and populates them as time-series. | ✅ | ✅ |
-| **DataLoadArdupilot** | Loads ArduPilot `.BIN` flight logs directly into PlotJuggler. All numeric fields are automatically available as plot series, with correct units applied. A dialog shows flight **Parameters**, **Embedded Files**, and **Messages** from the log. | ✅ | ✅ |
+| **DataStreamMavlink** | Streams live MAVLink telemetry over UDP, TCP, or Serial. ([PJ3](pj3/DataStreamMavlink/README.md) / [PJ4](pj4/plugins/data_stream_mavlink/README.md)) | [v0.2.0](https://github.com/RickyWu18/plotjuggler-drone/releases/tag/pj3-v0.2.0) | [v0.1.0](https://github.com/RickyWu18/plotjuggler-drone/releases/tag/data_stream_mavlink/v0.1.0) |
+| **DataLoadArdupilot** | Loads ArduPilot `.BIN` flight logs with correct units. ([PJ3](pj3/DataLoadArdupilot/README.md) / [PJ4](pj4/plugins/data_load_ardupilot/README.md)) | [v0.2.0](https://github.com/RickyWu18/plotjuggler-drone/releases/tag/pj3-v0.2.0) | [v1.2.0](https://github.com/RickyWu18/plotjuggler-drone/releases/tag/data_load_ardupilot/v1.2.0) |
 
-### DataStreamMavlink — Feature Highlights
-
-- **Three transports:** UDP (default port 14550), TCP client, and Serial port — switchable from the connection dialog.
-- **Zero-config field discovery:** every numeric field in every MAVLink message is automatically mapped to a plot series named `mav/<sysid>.<compid>/<MSG_NAME>/<field>`.
-- **Multi-vehicle:** differentiates streams by `sysid.compid`, so data from multiple vehicles on the same link is kept separate.
-- **Message Interval control (PJ3 only):** via the **"Message Intervals…"** toolbar action, view live message rates and send `SET_MESSAGE_INTERVAL` commands back to the vehicle to tune what gets streamed and how fast.
-
-### DataLoadArdupilot — Feature Highlights
-
-- **No conversion needed:** open `.BIN` files directly — no pre-processing or format conversion required.
-- **All fields, correct units:** every numeric field across all message types is automatically available as a plot series, with units and scaling applied. Optionally append the unit to each series name (e.g. `Roll(deg)`) via a checkbox before loading.
-- **Multi-instance sensor support:** sensors with multiple instances (e.g. two GPS units) are kept separate and clearly labelled.
-- **Info dialog** with three tabs:
-  - **Parameters** — all flight parameters from the log, with live search filtering and one-click export to a `.param` file.
-  - **Embedded Files** — any files embedded in the log (e.g. crash dumps, config backups), exportable to a folder.
-  - **Messages** — all flight messages with timestamps.
-- **Official naming compat (PJ3 only):** an optional checkbox matches the series naming convention used by the [official ArduPilot PlotJuggler plugin](https://github.com/ArduPilot/plotjuggler-apbin-plugins), so saved layouts and scripts work without changes.
+See each plugin's README for its feature list.
 
 ---
 
@@ -60,16 +44,12 @@ PlotJuggler is a fast, open-source time-series visualization tool. This reposito
 
 #### Option A - Marketplace
 
-> **Coming soon:** Marketplace installation is being prepared.
-
-<!--
 1. **Install PlotJuggler 4.x.**
 2. **Open PlotJuggler 4.x Marketplace** at `File > Extensions Marketplace`.
-3. **Find and Install the plugins**
+3. **Find and Install the plugin**
    - **DataLoadArdupilot**: Ardupilot BIN Loader
-   - **DataStreamMavlink**: MAVLink streamer
-4. **Restart PlotJuggler.** The plugins will load in the new session.
--->
+   - **DataStreamMavlink**: MAVLink streamer — *coming soon, use Option B for now.*
+4. **Restart PlotJuggler.** The plugin will load in the new session.
 
 #### Option B - Install Locally
 
