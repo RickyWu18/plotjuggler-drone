@@ -519,6 +519,26 @@ TEST(ArdupilotParser, InstancesGetOwnGroups) {
   }
 }
 
+TEST(ArdupilotParser, InstanceLabelInstSplitsBatteriesIntoGroups) {
+  // Recent firmware labels the BAT instance column "Inst" rather than "I" (TimeUS,Inst,Volt = 3 + 8 + 1 + 4 = 16)
+  std::vector<uint8_t> log;
+  fmt(log, 151, 16, "BAT", "QBf", "TimeUS,Inst,Volt");
+  const uint8_t instances[] = {0, 1};
+  for (const uint8_t inst : instances) {
+    header(log, 151);
+    put<uint64_t>(log, 10);
+    put<uint8_t>(log, inst);
+    put<float>(log, 12.0F);
+  }
+
+  RecordingSink sink;
+  Parser parser(log.data(), log.size(), {}, &sink);
+  ASSERT_EQ(sink.groups.size(), 2U);
+  EXPECT_EQ(sink.groups[0].name, "BAT/0");
+  EXPECT_EQ(sink.groups[1].name, "BAT/1");
+  EXPECT_EQ(sink.rows[1].group, 1U);
+}
+
 TEST(ArdupilotParser, CollectsParametersMessagesAndFilesWithoutSink) {
   std::vector<uint8_t> log;
   // PARM "QNf" (3 + 8 + 16 + 4 = 31), MSG "QZ" (3 + 8 + 64 = 75),

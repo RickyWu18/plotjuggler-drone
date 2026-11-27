@@ -290,7 +290,7 @@ Parser::MessageDef Parser::buildMessageDef(const uint8_t* payload86) {
       def.timestamp_idx = static_cast<int>(i);
     }
 
-    if ((c == 'B' || c == 'M') && (field.label == "I" || field.label == "Instance")) {
+    if ((c == 'B' || c == 'M') && (field.label == "I" || field.label == "Instance" || field.label == "Inst")) {
       def.instance_idx = static_cast<int>(i);
     }
 
