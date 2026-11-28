@@ -91,9 +91,13 @@ jobs:
       - name: Detect Conan profile
         run: conan profile detect --force
 
-      # build.sh runs scripts/ensure_sdk.sh first: plotjuggler_sdk/<SDK_VERSION> is built from
-      # the v<SDK_VERSION> git tag into the Conan cache, then only the tagged plugin is built
-      # (and only its Conan deps fetched); no plugin argument builds everything.
+      # plotjuggler_sdk is published only on the PlotJuggler remote, not on conancenter.
+      - name: Add PlotJuggler Conan remote
+        run: conan remote add plotjuggler-conan https://plotjuggler.jfrog.io/artifactory/api/conan/plotjuggler-conan --force
+
+      # conan install fetches plotjuggler_sdk/<SDK_VERSION> from the plotjuggler-conan remote;
+      # only the tagged plugin is built (and only its Conan deps fetched); no plugin argument
+      # builds everything.
       - name: Build
         run: ./build.sh ${{ steps.scope.outputs.plugin }}
 

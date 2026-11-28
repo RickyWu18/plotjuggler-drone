@@ -1,20 +1,21 @@
 # pj4 — PlotJuggler 4 drone plugins
 
-Plugins built against `plotjuggler_sdk` (sibling checkout at `../../plotjuggler_sdk`; read its `CLAUDE.md`
-and the `plotjuggler-plugin` skill before writing a plugin). Reference plugins: `../../pj-official-plugins`.
+Plugins built against the `plotjuggler_sdk` Conan package (from the `plotjuggler-conan` remote; no sibling
+checkout needed). SDK docs: https://github.com/PlotJuggler/plotjuggler_sdk. Reference plugins:
+https://github.com/PlotJuggler/pj-official-plugins.
 
 ## Build and test
 
 ```bash
-./build.sh [--debug]   # conan install + cmake + build (needs a compiler-ready shell)
+./build.sh [--debug]   # conan install + cmake + build (PowerShell: ./build.ps1 [-Debug])
 ./test.sh              # ctest
 ```
 
-- Bump the SDK by editing `SDK_VERSION`; `scripts/ensure_sdk.sh` provides it in the Conan cache.
+- Bump the SDK by editing `SDK_VERSION`; `conan install` fetches it from the remote.
+  To build against an unreleased local SDK checkout: `./build.sh --sdk-path /path/to/plotjuggler_sdk`.
 - New plugin: copy `plugins/hello_source`, keep `pj_configure_plugin()`; it is discovered automatically.
   Add its third-party deps to `conanfile.py`.
 - Warnings are errors (`PJ_WARNING_FLAGS`). Style: Google clang-format, 120 columns (`pre-commit run -a`).
-- Windows: use the `Git Bash (VS Dev)` profile (`../../.vscode/settings.json`) so `cl` is on PATH.
 
 ## Shared code
 
