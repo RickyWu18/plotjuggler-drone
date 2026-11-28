@@ -80,6 +80,10 @@ jobs:
       - name: Detect Conan profile
         run: conan profile detect --force
 
+      # plotjuggler_sdk is published only on the PlotJuggler remote, not on conancenter.
+      - name: Add PlotJuggler Conan remote
+        run: conan remote add plotjuggler-conan https://plotjuggler.jfrog.io/artifactory/api/conan/plotjuggler-conan --force
+
       - name: Build
         run: ./build.sh
 
