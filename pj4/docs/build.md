@@ -3,32 +3,22 @@
 PJ4 plugins are built against the [`plotjuggler_sdk`](https://github.com/PlotJuggler/plotjuggler_sdk)
 Conan package. PlotJuggler itself does not need to be built first.
 
-## Windows
+## Setup the Environment
 
-### Setup the Environment
+**1. Prerequisites.** CMake >= 3.22, Git, Python 3, and Conan 2 (`pip install conan`, then `conan profile detect`
+once), plus a C++20 compiler:
 
-**1. Prerequisites.** Visual Studio (C++ workload), CMake >= 3.22, Git, Python 3, and Conan 2
-(`pip install conan`, then `conan profile detect` once).
+- **Windows:** Visual Studio (C++ workload). Run the scripts from Git Bash.
+- **Linux:** GCC 11+ or Clang (Ninja is used automatically when installed).
 
-**2. Workspace layout.** The SDK is taken from a sibling checkout when its `VERSION` matches `pj4/SDK_VERSION`;
-otherwise it is built from the git tag.
-
-```
-plotjuggler4_ws/
-├── plotjuggler_sdk/       <- SDK source
-└── plotjuggler-drone/     <- this repo
-```
+**2. Clone and add the SDK remote.** The SDK is a Conan package; no sibling checkout is needed.
 
 ```bash
-mkdir plotjuggler4_ws && cd plotjuggler4_ws
-git clone https://github.com/PlotJuggler/plotjuggler_sdk.git
 git clone --recurse-submodules https://github.com/RickyWu18/plotjuggler-drone.git
+conan remote add plotjuggler-conan https://plotjuggler.jfrog.io/artifactory/api/conan/plotjuggler-conan
 ```
 
-**3. Open a compiler-ready shell.** Use the `Git Bash (VS Dev)` terminal profile from `.vscode/settings.json`
-so `cl` is on `PATH`.
-
-### Build
+## Build
 
 ```bash
 cd plotjuggler-drone/pj4
@@ -37,8 +27,19 @@ cd plotjuggler-drone/pj4
 ./package.sh          # optional: zip plugins into dist/
 ```
 
-`build.sh` provides `plotjuggler_sdk/<SDK_VERSION>` in the Conan cache (`FORCE_SDK=1` rebuilds it,
-`SDK_LOCAL_DIR=/path` overrides the checkout), then runs `conan install`, CMake and the build.
+`build.sh` runs `conan install` (which fetches `plotjuggler_sdk/<SDK_VERSION>` from the remote), CMake and the build.
 
-The compiled `.dll` and its `.pjmanifest.json` are placed in `pj4/build/all/bin/` (or `pj4/build/<plugin>/bin/` when built with `./build.sh <plugin>`). Copy both into the plugin
+To build against an unreleased local SDK checkout instead, pass its path:
+
+```bash
+./build.sh --sdk-path /path/to/plotjuggler_sdk
+```
+
+The SDK is built into the Conan cache as `plotjuggler_sdk/<its VERSION>@local/dev` (it does not replace the released
+package) and is rebuilt on every run. Remove it with `conan remove "plotjuggler_sdk/*@local/dev" -c`.
+
+On Windows you can use PowerShell instead of Git Bash: `./build.ps1` takes the same options
+(`-Debug`, `-SdkPath <dir>`, plugin names).
+
+The compiled plugin (`.dll` on Windows, `.so` on Linux) and its `.pjmanifest.json` are placed in `pj4/build/all/bin/` (or `pj4/build/<plugin>/bin/` when built with `./build.sh <plugin>`). Copy both into the plugin
 directory scanned by the PJ4 host.
